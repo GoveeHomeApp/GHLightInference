@@ -1,0 +1,37 @@
+platform :ios, '13.0'
+use_frameworks!
+
+source 'git@github.com:GoveeHomeApp/GHSpecs.git'
+
+target 'GHLightInference_Example' do
+
+  pod 'GHLightInference', :path => '../'
+
+end
+
+# post_install do |installer|
+#   search_modules(installer)
+# end
+
+# def search_modules(installer)
+#   modules = installer.pod_targets.map do |target|
+#     module_name = target.info_plist_entries["GHModular"]
+#   end
+#   modules.compact!
+#   #puts modules
+  
+#   project_path = installer.aggregate_targets[0].user_project_path
+#   #puts "#{project_path}"
+#   project = Xcodeproj::Project.open(project_path)
+#   project_dir_path = project.project_dir
+#   target = project.targets[0]
+#   config = target.build_configurations[0]
+#   settings = config.build_settings
+#   info_plist_name = settings["INFOPLIST_FILE"]
+#   info_plist_path = "#{project_dir_path}/#{info_plist_name}"
+#   puts info_plist_path
+#   info_plist = Xcodeproj::Plist.read_from_path(info_plist_path)
+#   info_plist["GHModules"] = modules
+#   #puts info_plist
+#   Xcodeproj::Plist.write_to_path(info_plist, info_plist_path)
+# end

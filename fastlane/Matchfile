@@ -1,0 +1,11 @@
+git_url("git@github.com:igovee/GoveeComponentsIOSCer.git")
+
+storage_mode("git")
+
+type("development")
+
+generate_apple_certs(false)
+
+app_identifier(["com.goveematch.*"])
+
+username("app.dev@ihoment.com")
