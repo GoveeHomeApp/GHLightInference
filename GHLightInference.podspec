@@ -17,25 +17,14 @@ Pod::Spec.new do |s|
   s.source       = { :git => 'git@github.com:GoveeHomeApp/GHLightInference.git', :tag => s.version.to_s }
 
   s.source_files = 'GHLightInference/Classes/**/*'
-
-  #- 此参数用于注册组件 -#
-  #s.info_plist = { 'GHModular' => 'GHxxxxxxx.GHxxxxxModule' }
+  
+  s.private_header_files = 'GHLightInference/Classes/**/*.hpp'
 
   #- 推荐这种 -#
-  # s.resource_bundles = { 'GHLightInference' => ['GHLightInference/*.xcassets'] }
-
-  # s.resources  = 'GHLightInference/**/*.{storyboard,xib}', 'GHLightInference/Assets/*'
-  # s.resources = 'Resources/*.png'
-
-  # s.preserve_paths = 'FilesToSave', 'MoreFilesToSave'
-
-  # s.framework  = 'SomeFramework'
-  # s.frameworks = 'SomeFramework', 'AnotherFramework'
-
-  # s.library   = 'iconv'
-  # s.libraries = 'iconv', 'xml2'
-
-  # s.xcconfig = { 'HEADER_SEARCH_PATHS' => '$(SDKROOT)/usr/include/libxml2' }
-  # s.dependency 'AFNetworking'
+  s.resource_bundles = { 'GHLightInference' => ['GHLightInference/Assets/**/*.{xcassets,png,torchscript.ptl,json,plist,txt}'] }
+  s.vendored_frameworks = ['opencv2.framework']
+  s.xcconfig = { 'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/LibTorch-Lite/install/include/"' }
+  s.dependency 'LibTorch-Lite', '~>1.13.0.1'
+  s.dependency 'HandyJSON'
 
 end
