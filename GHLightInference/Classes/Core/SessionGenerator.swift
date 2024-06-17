@@ -37,7 +37,7 @@ public class LightQueueResult: HandyJSON {
     
     public var x: Int = 0
     public var y: Int = 0
-    public var lightIndex: Int = -1
+    public var index: Int = -1
     public var totalTfScore: Int = 0
     public var score: Int = 0
     public var tfScore: CGFloat = 0.0

@@ -172,7 +172,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.frameHandler = { [weak self] step in
             guard let `self` = self else { return }
             if let _ = self.transaction { //正常transaction
-                self.captureOneFrame()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.captureOneFrame()
+                }
             }
         }
         
@@ -228,6 +230,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         // 实时帧回调 这里只根据 业务侧closure回调取当前帧图像
         if self.needGetFrame {
+            print("\n log.f ============= 开始取一帧")
             if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer),let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
                 self.preImageArray.append(scaleImage)
                 DispatchQueue.main.asyncAfter(deadline: .now()+0.1) {
@@ -293,17 +296,19 @@ extension GHDetectionTool {
         var pointsDict: [Int: [CGFloat]] = [:]
         for res in points.lightPoints {
             let ptArray = [CGFloat(res.x), CGFloat(res.y)]
-            pointsDict[res.lightIndex] = ptArray
+            pointsDict[res.index] = ptArray
         }
-        var anchorPoints: [[CGFloat]] = [[]]
-        if points.trapezoidalPoints.count > 3 {
-            points.trapezoidalPoints.swapAt(0, 1)
-            points.trapezoidalPoints.swapAt(1, 2)
+        var anchorPoints: [[CGFloat]] = []
+        // 直接拿四个点 变更点位置
+        if !points.trapezoidalPoints.isEmpty {
+            let res = points.trapezoidalPoints.removeLast()
+            points.trapezoidalPoints.insert(res, at: 0)
+            points.trapezoidalPoints.swapAt(2, 3) // 交换下标 1,2
         }
         for pt in points.trapezoidalPoints{
             anchorPoints.append([CGFloat(pt.x), CGFloat(pt.y)])
         }
-        var result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints)
+        var result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0])
         return result
     }
     
@@ -332,7 +337,7 @@ extension GHDetectionTool {
                     self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                     var poArr: [PredictObject] = []
                     var ct = 0
-                    for pre in nmsPredictions.filter({ $0.score > 0.65 && $0.classIndex != 2 }) {
+                    for pre in nmsPredictions.filter({ $0.score > 0.25 && $0.classIndex != 2 }) {
                         ct+=1
                         let po = PredictObject()
                         po.type = pre.classIndex
@@ -369,6 +374,8 @@ extension GHDetectionTool {
                             #if DEBUG
                             self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
+                        } else {
+                            self.doneNotice?(nil)
                         }
                     }
                 }

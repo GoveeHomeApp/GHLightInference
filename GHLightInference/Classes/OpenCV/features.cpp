@@ -169,7 +169,7 @@ String sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int rad
                 curPoint.contourArea = rect.width * rect.height;
                 points.push_back(center);
             }
-            mergePoints(points, 6);
+//            mergePoints(points, 6);
             //polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &outMat);
             Mat out = src.clone();
             polyPoints(points, 3, 2.3, out);
