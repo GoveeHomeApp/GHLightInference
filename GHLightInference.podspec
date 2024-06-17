@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
 
   s.source_files = 'GHLightInference/Classes/**/*'
   
-  s.private_header_files = 'GHLightInference/Classes/**/*.hpp'
+  s.private_header_files = 'GHLightInference/Classes/OpenCV/**/*.{hpp,h}'
 
   #- 推荐这种 -#
   s.resource_bundles = { 'GHLightInference' => ['GHLightInference/Assets/**/*.{xcassets,png,torchscript.ptl,json,plist,txt}'] }

@@ -7,15 +7,15 @@
 /**
  * 得分计算序列
  */
-vector <vector<int>> scoreVV = {{0, 1,   2},
-                                {0, 3,   5},
-                                {0, 6,   10},
-                                {0, 11,  19},
-                                {0, 20,  36},
-                                {0, 37,  69},
-                                {0, 70,  134},
-                                {0, 135, 263},
-                                {0, 264, 520}};
+vector<vector<int>> scoreVV = {{0, 1,   2},
+                               {0, 3,   5},
+                               {0, 6,   10},
+                               {0, 11,  19},
+                               {0, 20,  36},
+                               {0, 37,  69},
+                               {0, 70,  134},
+                               {0, 135, 263},
+                               {0, 264, 520}};
 
 //对齐精度
 double termination_eps2 = 1e-4;
@@ -25,7 +25,7 @@ float fontScale = 0.6;
 int radiusCircle2 = 2;
 int motionTypeSet = MOTION_HOMOGRAPHY;
 //得分点集合
-vector <LightPoint> pPoints;
+vector<LightPoint> pPoints;
 unordered_map<int, vector<LightPoint>> pointsStepMap;
 //记录有效帧
 unordered_map<int, Mat> frameStepMap;
@@ -42,7 +42,7 @@ COMPLETION_LEVEL completionLevel = COMPLETION_INTERVAL;
  * @param outMats 输出流程中的测试图像
  * @return
  */
-Mat alignResize(int frameStep, Mat &originalMat, vector <Mat> &outMats) {
+Mat alignResize(int frameStep, Mat &originalMat, vector<Mat> &outMats) {
     Mat srcResize, alignMat;
     // 指定缩放后的尺寸
     cv::Size newSize(640, 640);
@@ -152,88 +152,75 @@ Mat alignResize(int frameStep, Mat &originalMat, vector <Mat> &outMats) {
  * @param outMats 输出流程中的测试图像
  * @return
  */
-String sortStripByStep(int frameStep, vector <LightPoint> &resultObjects, int radiusCircle,
-                       vector <Mat> &outMats) {
-    if (frameStep == STEP_VALID_FRAME_START && !resultObjects.empty()) {
-        LOGD(LOG_TAG, "-------tensorFlow");
-        Mat originalFrame1C = frameStepMap[STEP_VALID_FRAME_START].clone();
-        putText(originalFrame1C, "tensorFlow",
-                Point(40, 40),
-                FONT_HERSHEY_SIMPLEX, 0.5,
-                Scalar(0, 0, 0), 2);
-        for (int i = 0; i < resultObjects.size(); i++) {
-            LightPoint curPoint = resultObjects[i];
-            Rect_<int> rect = curPoint.tfRect;
-            Point center = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
-            if (rect.width < 1 || rect.height < 1) {
-                LOGE(LOG_TAG, "-------tensorFlow  error");
-            }
-            curPoint.point2f = center;
-            curPoint.contourArea = rect.width * rect.height;
-            circle(originalFrame1C, center, radiusCircle, Scalar(255, 255, 255), 2);
-            if (i == resultObjects.size() - 1) {
-                outMats.push_back(originalFrame1C);
-            }
-        }
-    }
+String sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int radiusCircle,
+                       vector<Mat> &outMats) {
+
     if (frameStep == STEP_VALID_FRAME_START) {
-        if (resultObjects.empty()) {
-            Mat src = frameStepMap[STEP_VALID_FRAME_START].clone();
-            vector <Point> points, trapezoidPoints;
-            findByContours(src, points, trapezoidPoints, outMats);
-            LOGD(LOG_TAG, "-------findByContours points=%d", points.size());
-            for (int i = 0; i < points.size(); i++) {
-                LightPoint curPoint = LightPoint();
-                Point center = points[i];
-                curPoint.point2f = points[i];
-                pPoints.push_back(curPoint);
-                if (i == 0 || pointsAreaTop > center.y) {
-                    pointsAreaTop = center.y;
-                }
-                if (i == 0 || pointsAreaBottom < center.y) {
-                    pointsAreaBottom = center.y;
-                }
-                if (i == 0 || pointsAreaLeft > center.x) {
-                    pointsAreaLeft = center.x;
-                }
-                if (i == 0 || pointsAreaRight < center.x) {
-                    pointsAreaRight = center.x;
-                }
-            }
-        } else {
+        Mat src = frameStepMap[frameStep].clone();
+        vector<Point> points;
+        if (resultObjects.empty())
+            findByContours(src, points, outMats);
+        if (!resultObjects.empty()) {
             for (int i = 0; i < resultObjects.size(); i++) {
                 LightPoint curPoint = resultObjects[i];
                 Rect_<int> rect = curPoint.tfRect;
                 Point center = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
                 curPoint.point2f = center;
                 curPoint.contourArea = rect.width * rect.height;
-                pPoints.push_back(curPoint);
-                if (i == 0 || pointsAreaTop > center.y) {
-                    pointsAreaTop = center.y;
-                }
-                if (i == 0 || pointsAreaBottom < center.y) {
-                    pointsAreaBottom = center.y;
-                }
-                if (i == 0 || pointsAreaLeft > center.x) {
-                    pointsAreaLeft = center.x;
-                }
-                if (i == 0 || pointsAreaRight < center.x) {
-                    pointsAreaRight = center.x;
-                }
+                points.push_back(center);
+            }
+            mergePoints(points, 6);
+            //polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &outMat);
+            Mat out = src.clone();
+            polyPoints(points, 3, 2.3, out);
+        }
+        LOGD(LOG_TAG, "-------findByContours points=%d", points.size());
+        for (int i = 0; i < points.size(); i++) {
+            LightPoint curPoint = LightPoint();
+            Point center = points[i];
+            curPoint.point2f = points[i];
+            pPoints.push_back(curPoint);
+            if (i == 0 || pointsAreaTop > center.y) {
+                pointsAreaTop = center.y;
+            }
+            if (i == 0 || pointsAreaBottom < center.y) {
+                pointsAreaBottom = center.y;
+            }
+            if (i == 0 || pointsAreaLeft > center.x) {
+                pointsAreaLeft = center.x;
+            }
+            if (i == 0 || pointsAreaRight < center.x) {
+                pointsAreaRight = center.x;
             }
         }
         LOGD(LOG_TAG, "pointsAreaTop=%d,pointsAreaBottom=%d,pointsAreaLeft=%d,pointsAreaRight=%d",
              pointsAreaTop, pointsAreaBottom, pointsAreaLeft, pointsAreaRight);
     }
+    if (frameStep == STEP_VALID_FRAME_START && !pPoints.empty()) {
+        LOGD(LOG_TAG, "-------tensorFlow");
+        Mat originalFrame1C = frameStepMap[STEP_VALID_FRAME_START].clone();
+        putText(originalFrame1C, "tensorFlow",
+                Point(40, 40),
+                FONT_HERSHEY_SIMPLEX, 0.5,
+                Scalar(0, 0, 0), 2);
+        for (int i = 0; i < pPoints.size(); i++) {
+            LightPoint curPoint = pPoints[i];
+            circle(originalFrame1C, curPoint.point2f, radiusCircle, Scalar(255, 255, 255), 2);
+            if (i == pPoints.size() - 1) {
+                outMats.push_back(originalFrame1C);
+            }
+        }
+    }
+
     //定位特征点
     pointsStepMap[frameStep] = findColorType(frameStepMap[frameStep], frameStep, pPoints,
                                              outMats);
 
     if (frameStep == getMaxStepCnt() - 1) {
         //--------------------------------------- 开始识别 ---------------------------------------
-        vector <Point2i> trapezoid4Points;
-        vector <LightPoint> points = checkLightStrip(frameStepMap[STEP_VALID_FRAME_START], outMats,
-                                                     trapezoid4Points);
+        vector<Point2i> trapezoid4Points;
+        vector<LightPoint> points = checkLightStrip(frameStepMap[STEP_VALID_FRAME_START], outMats,
+                                                    trapezoid4Points);
         pointsStepMap.clear();
         frameStepMap.clear();
         pPoints.clear();
@@ -249,10 +236,10 @@ String sortStripByStep(int frameStep, vector <LightPoint> &resultObjects, int ra
 /**
  * 对灯带光点排序
  */
-vector <LightPoint>
-checkLightStrip(Mat & src, vector < Mat > &outMats, vector < Point2i > &trapezoid4Points) {
+vector<LightPoint>
+checkLightStrip(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points) {
     //构建新的集合来存储
-    vector <LightPoint> pointsNew;
+    vector<LightPoint> pointsNew;
     int scoreMin = getScoreMin();
     int scoreMax = getScoreMax();
     int maxFrameStep = getMaxStepCnt();
@@ -263,8 +250,8 @@ checkLightStrip(Mat & src, vector < Mat > &outMats, vector < Point2i > &trapezoi
     // 1. 统计分值相同的index
     // 2. 标记异常分点
     map<int, vector<int>> sameScoreMap;
-    vector <LightPoint> redSameVector;
-    vector <LightPoint> greenSameVector;
+    vector<LightPoint> redSameVector;
+    vector<LightPoint> greenSameVector;
     auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < pPoints.size(); i++) {
@@ -598,7 +585,7 @@ checkLightStrip(Mat & src, vector < Mat > &outMats, vector < Point2i > &trapezoi
     }
 
     //输出一张好点图
-    vector <Point2i> points;
+    vector<Point2i> points;
     Mat dstCircle = src.clone();
     for (int i = 0; i < pPoints.size(); i++) {
         Point2f center = pPoints[i].point2f;
@@ -635,8 +622,8 @@ checkLightStrip(Mat & src, vector < Mat > &outMats, vector < Point2i > &trapezoi
 
 LightPoint inferredRight(LightPoint &curLPoint,
                          LightPoint &lastLPoint,
-                         LightPoint &nextLPoint, int i, vector <LightPoint> &pointsNew,
-                         vector <LightPoint> &redSameVector, vector <LightPoint> &greenSameVector) {
+                         LightPoint &nextLPoint, int i, vector<LightPoint> &pointsNew,
+                         vector<LightPoint> &redSameVector, vector<LightPoint> &greenSameVector) {
     //下一个值没有，推断点可能位置
     LOGW(LOG_TAG,
          "【补点流程B】推断[下一个]点序号 = %d curLPoint = %d  lastLPoint = %d nextPoint = %d",
@@ -668,8 +655,8 @@ LightPoint inferredRight(LightPoint &curLPoint,
 
 LightPoint inferredLeft(LightPoint &curLPoint,
                         LightPoint &lastLPoint,
-                        LightPoint &nextLPoint, int i, vector <LightPoint> &pointsNew,
-                        vector <LightPoint> &redSameVector, vector <LightPoint> &greenSameVector) {
+                        LightPoint &nextLPoint, int i, vector<LightPoint> &pointsNew,
+                        vector<LightPoint> &redSameVector, vector<LightPoint> &greenSameVector) {
     LOGW(LOG_TAG,
          "【补点流程C】推断[上一个]点序号 = %d curLPoint = %d  lastLPoint = %d nextPoint = %d",
          curLPoint.lightIndex - 1, curLPoint.lightIndex, lastLPoint.lightIndex,
@@ -700,8 +687,8 @@ LightPoint inferredLeft(LightPoint &curLPoint,
 }
 
 
-LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, vector <LightPoint> &redSameVector,
-                           vector <LightPoint> &greenSameVector) {
+LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, vector<LightPoint> &redSameVector,
+                           vector<LightPoint> &greenSameVector) {
     int diff = A.lightIndex - B.lightIndex;
     double diffSegmentLenX = (A.point2f.x - B.point2f.x) / diff;
     double diffSegmentLenY = (A.point2f.y - B.point2f.y) / diff;
@@ -736,8 +723,8 @@ LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, vector <LightPoint> &re
     return inferredPoint;
 }
 
-LightPoint inferredAB2C(LightPoint &A, LightPoint &B, vector <LightPoint> &redSameVector,
-                        vector <LightPoint> &greenSameVector) {
+LightPoint inferredAB2C(LightPoint &A, LightPoint &B, vector<LightPoint> &redSameVector,
+                        vector<LightPoint> &greenSameVector) {
     int diff;
     if (A.lightIndex < 0) {
         diff = getLightIndex(A.score) - B.lightIndex - 1;
@@ -786,82 +773,73 @@ LightPoint inferredAB2C(LightPoint &A, LightPoint &B, vector <LightPoint> &redSa
 /**
  * 对齐图片
  */
-Mat alignImg(Mat & src, Mat & trans, bool
+Mat alignImg(Mat &src, Mat &trans, bool
 back4Matrix) {
-if (src.
-
-empty()
-
-) {
-LOGE(LOG_TAG, " src empty ");
-}
-if (trans.
-
-empty()
-
-) {
-LOGE(LOG_TAG, " trans empty ");
-}
-Mat warp_matrix;
-if (motionTypeSet == MOTION_AFFINE) {
-warp_matrix = Mat::eye(2, 3, CV_32F);
-} else if (motionTypeSet == MOTION_HOMOGRAPHY) {//MOTION_HOMOGRAPHY 耗时更久
-warp_matrix = Mat::eye(3, 3, CV_32F);
-} else {
+    if (src.empty()) {
+        LOGE(LOG_TAG, " src empty ");
+    }
+    if (trans.empty()) {
+        LOGE(LOG_TAG, " trans empty ");
+    }
+    Mat warp_matrix;
+    if (motionTypeSet == MOTION_AFFINE) {
+        warp_matrix = Mat::eye(2, 3, CV_32F);
+    } else if (motionTypeSet == MOTION_HOMOGRAPHY) {//MOTION_HOMOGRAPHY 耗时更久
+        warp_matrix = Mat::eye(3, 3, CV_32F);
+    } else {
 //MOTION_EUCLIDEAN
-}
+    }
 // 降低图像分辨率
 // 创建掩膜，指定搜索区域
-cv::Mat mask = cv::Mat::zeros(trans.size(), CV_8UC1);
-Rect searchRegion;
-searchRegion = Rect(pointsAreaLeft, pointsAreaTop, pointsAreaRight - pointsAreaLeft,
-                    pointsAreaBottom - pointsAreaTop);
-int area = searchRegion.width * searchRegion.height;
-if (area < 25) {
+    cv::Mat mask = cv::Mat::zeros(trans.size(), CV_8UC1);
+    Rect searchRegion;
+    searchRegion = Rect(pointsAreaLeft, pointsAreaTop, pointsAreaRight - pointsAreaLeft,
+                        pointsAreaBottom - pointsAreaTop);
+    int area = searchRegion.width * searchRegion.height;
+    if (area < 25) {
 // 假设我们只想在目标图像的一个特定区域内搜索
-LOGE(LOG_TAG, "area < 25,use hard rect");
-searchRegion = Rect(120, 120, 400, 400); // x, y, width, height
-}
+        LOGE(LOG_TAG, "area < 25,use hard rect");
+        searchRegion = Rect(120, 120, 400, 400); // x, y, width, height
+    }
 
-rectangle(mask, searchRegion, Scalar::all(255), FILLED
-);
+    rectangle(mask, searchRegion, Scalar::all(255), FILLED
+    );
 
 // Convert images to grayscale
-Mat alignedImg;
-Mat im1Src, im2Trans;
+    Mat alignedImg;
+    Mat im1Src, im2Trans;
 //    //转换为灰度图
-cvtColor(src, im1Src, CV_BGR2GRAY
-);
-cvtColor(trans, im2Trans, CV_BGR2GRAY
-);
-TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS,
-                      number_of_iterations2, termination_eps2);
-findTransformECC(im1Src, im2Trans, warp_matrix,
-        motionTypeSet, criteria, mask
-);
-if (motionTypeSet == MOTION_HOMOGRAPHY) {
-warpPerspective(trans, alignedImg, warp_matrix, trans
-.
+    cvtColor(src, im1Src, CV_BGR2GRAY
+    );
+    cvtColor(trans, im2Trans, CV_BGR2GRAY);
+    TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS,
+                          number_of_iterations2, termination_eps2);
+    findTransformECC(im1Src, im2Trans, warp_matrix,
+                     motionTypeSet, criteria, mask
+    );
+    if (motionTypeSet == MOTION_HOMOGRAPHY) {
+        warpPerspective(trans, alignedImg, warp_matrix, trans
+                .
 
-size(), INTER_LINEAR
+                        size(), INTER_LINEAR
 
-+ WARP_INVERSE_MAP);
-} else {
-warpAffine(trans, alignedImg, warp_matrix, trans
-.
+                                + WARP_INVERSE_MAP);
+    } else {
+        warpAffine(trans, alignedImg, warp_matrix, trans
+                .
 
-size(), INTER_LINEAR
+                        size(), INTER_LINEAR
 
-+ WARP_INVERSE_MAP);
-}
-if (back4Matrix) {
-return
-warp_matrix;
-}
+                                + WARP_INVERSE_MAP);
+    }
+    if (back4Matrix) {
+        return
+                warp_matrix;
+    }
 //    // 在图像上绘制矩形
 //    rectangle(alignedImg, searchRegion, Scalar(255, 255, 0), 2);
-return
-alignedImg;
+    return
+            alignedImg;
 
 }
 
@@ -879,115 +857,89 @@ bool compareIndex(const LightPoint &p1, const LightPoint &p2) {
 /**
  * 获取区域颜色集合
  */
-vector <LightPoint>
-        findColorType(Mat & src, int
-stepFrame,
-vector <LightPoint> &points,
-        vector<Mat>
-&outMats) {
-vector <LightPoint> result;
-Mat meanColorMat = src.clone();
-for (
-int i = 0;
-i<points.
-
-size();
-
-i++) {
-LightPoint lPoint = points[i];
-Scalar scalar;
-LightPoint lightPoint = meanColor(src, stepFrame, lPoint, meanColorMat);
-result.
-push_back(lightPoint);
-}
-outMats.
-push_back(meanColorMat);
-return
-result;
+vector<LightPoint>
+findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &outMats) {
+    vector<LightPoint> result;
+    Mat meanColorMat = src.clone();
+    for (int i = 0; i < points.size(); i++) {
+        LightPoint lPoint = points[i];
+        Scalar scalar;
+        LightPoint lightPoint = meanColor(src, stepFrame, lPoint, meanColorMat);
+        result.push_back(lightPoint);
+    }
+    outMats.push_back(meanColorMat);
+    return result;
 }
 
 /**
  * 获取区域 hsv 色相
  */
-LightPoint meanColor(Mat & src, int
-stepFrame,
-LightPoint &lPoint, Mat
-&meanColorMat) {
-if (src.
+LightPoint meanColor(Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColorMat) {
+    if (src.empty()) {
+        LOGE(LOG_TAG, "meanColor(stepFrame=%d): Error: Image not found!", stepFrame);
+        return LightPoint();
 
-empty()
+    }
+    Point2f point = lPoint.point2f;
+    int x = point.x; // 指定坐标x
+    int y = point.y; // 指定坐标y
+    int radius = 5; // 指定半径
 
-) {
-LOGE(LOG_TAG, "meanColor(stepFrame=%d): Error: Image not found!", stepFrame);
-return
+    Rect roi(x - radius, y - radius, 2 * radius, 2 * radius);
 
-LightPoint();
+    if (x - radius < 0) {
+        roi.x = 0;
+        LOGE(LOG_TAG, "x<0");
+    }
+    if (y - radius < 0) {
+        roi.y = 0;
+        LOGE(LOG_TAG, "y<0");
+    }
+    if (roi.x + roi.width > src.cols) {
+        LOGE(LOG_TAG, "x>cols with:%d  src-cols: %d", (roi.x + roi.width), src.cols);
+        roi.width = src.cols - roi.x;
+    }
+    if (roi.y + roi.height > src.rows) {
+        LOGE(LOG_TAG, "y>rows height:%d  src-rows: %d", (roi.y + roi.height), src.rows);
+        roi.height = src.rows - roi.y;
+    }
 
-}
-Point2f point = lPoint.point2f;
-int x = point.x; // 指定坐标x
-int y = point.y; // 指定坐标y
-int radius = 5; // 指定半径
-
-Rect roi(x - radius, y - radius, 2 * radius, 2 * radius);
-
-if (x - radius < 0) {
-roi.
-x = 0;
-LOGE(LOG_TAG, "x<0");
-}
-if (y - radius < 0) {
-roi.
-y = 0;
-LOGE(LOG_TAG, "y<0");
-}
-if (roi.x + roi.width > src.cols) {
-LOGE(LOG_TAG, "x>cols with:%d  src-cols: %d", (roi.x + roi.width), src.cols);
-roi.
-width = src.cols - roi.x;
-}
-if (roi.y + roi.height > src.rows) {
-LOGE(LOG_TAG, "y>rows height:%d  src-rows: %d", (roi.y + roi.height), src.rows);
-roi.
-height = src.rows - roi.y;
-}
-
-Mat region = src(roi);
-Scalar avgPixelIntensity = mean(region);
+    Mat region = src(roi);
+    Scalar avgPixelIntensity = mean(region);
 
 //    double blue = avgPixelIntensity[0];
-double green = avgPixelIntensity[1];
-double red = avgPixelIntensity[2];
+    double green = avgPixelIntensity[1];
+    double red = avgPixelIntensity[2];
 
-Mat hsv;
-cvtColor(region, hsv, COLOR_BGR2HSV
-);
-Scalar mean = cv::mean(hsv);
+    Mat hsv;
+    cvtColor(region, hsv, COLOR_BGR2HSV
+    );
+    Scalar mean = cv::mean(hsv);
 
-CUS_COLOR_TYPE colorType = E_W;
-circle(meanColorMat, point, radius, Scalar(255, 255, 255),
-0.7);
-if (red > green) {//red > blue &&
-colorType = E_RED;
-putText(meanColorMat,
-"red", point, FONT_HERSHEY_SIMPLEX, 0.5,
-Scalar(255, 255, 255), 1);
+    CUS_COLOR_TYPE colorType = E_W;
+    circle(meanColorMat, point, radius, Scalar(255, 255, 255),
+           0.7);
+    if (red > green) {//red > blue &&
+        colorType = E_RED;
+        putText(meanColorMat,
+                "red", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                Scalar(255, 255, 255), 1);
 
-} else if (green > red) {// && green > blue
-colorType = E_GREEN;
-putText(meanColorMat,
-"green", point, FONT_HERSHEY_SIMPLEX, 0.5,
-Scalar(255, 255, 255), 1);
-} else {
-LOGV(LOG_TAG, "meanColor= 无法识别");
-putText(meanColorMat,
-"UnKnow", point, FONT_HERSHEY_SIMPLEX, 0.5,
-Scalar(255, 255, 255), 1);
-}
+    } else if (green > red) {// && green > blue
+        colorType = E_GREEN;
+        putText(meanColorMat,
+                "green", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                Scalar(255, 255, 255), 1);
+    } else {
+        LOGV(LOG_TAG, "meanColor= 无法识别");
+        putText(meanColorMat,
+                "UnKnow", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                Scalar(255, 255, 255), 1);
+    }
 
-return lPoint.
-copyPoint(colorType, mean
-);
+    return lPoint.
+            copyPoint(colorType, mean
+    );
 }
 
 bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C) {
@@ -1008,7 +960,7 @@ bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C) {
 /**
  * LightPoint集合输出json
  */
-string lightPointsToJson(const vector <LightPoint> &points) {
+string lightPointsToJson(const vector<LightPoint> &points) {
     stringstream ss;
     ss << "[";
     for (int i = 0; i < points.size(); i++) {
@@ -1038,7 +990,7 @@ string splicedJson(string a, string b) {
 /**
  * Point2i集合输出json
  */
-string point2iToJson(const vector <Point2i> &points) {
+string point2iToJson(const vector<Point2i> &points) {
     stringstream ss;
     ss << "[";
     for (int i = 0; i < points.size(); i++) {
@@ -1053,7 +1005,7 @@ string point2iToJson(const vector <Point2i> &points) {
             name = "lT";
         }
         ss << "{";
-        ss << "\"pName\": " << name << ", ";
+        ss << "\"pName\": \"" << name << "\", ";
         ss << "\"x\": " << points[i].x << ", ";
         ss << "\"y\": " << points[i].y << "";
         ss << "}";
@@ -1067,7 +1019,7 @@ string point2iToJson(const vector <Point2i> &points) {
 
 //todo:应该时更偏向线性方向优先
 LightPoint syncRectPoints(Point2i &center, double minDistance,
-                          vector <LightPoint> &points) {
+                          vector<LightPoint> &points) {
     if (minDistance > 150) {
         LOGE(LOG_TAG, "找不到推断点,距离过大");
         return LightPoint(EMPTY_POINT);
