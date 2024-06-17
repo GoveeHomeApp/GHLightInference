@@ -59,6 +59,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
     public var imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 640, height: 640))
     
+    public var resPointView = UIView(frame: CGRect(x: 0, y: 0, width: 120, height: 160))
+    
     public var detectionImage: UIImage?
     public var finalImage: UIImage?
     
@@ -372,6 +374,14 @@ extension GHDetectionTool {
                             self.finalImage = image
                             self.imageView.image = image
                             #if DEBUG
+                            self.resPointView.backgroundColor = UIColor.white
+                            for basRes in pt.lightPoints {
+                                print("log.f =========== point x:\(basRes.x/4) y:\(basRes.y/4) index:\(basRes.index)")
+                                // frame需要转换！！！
+                                let rectView = UIView(frame: CGRect(x: basRes.x/4, y: basRes.y/4, width: 2, height: 2))
+                                rectView.backgroundColor = UIColor.green
+                                self.resPointView.addSubview(rectView)
+                            }
                             self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
