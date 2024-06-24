@@ -355,7 +355,7 @@ extension GHDetectionTool {
                     
                     var resultJsonString = ""
                     for (idx, _) in self.afterImgArray.enumerated() {
-                        let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx)
+                        let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: 0)
                         if idx == self.afterImgArray.count-1 {
                             resultJsonString = jsonStr
                         }

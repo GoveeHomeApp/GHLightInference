@@ -100,16 +100,9 @@ void findByContours(Mat &image, vector<Point> &pointVector,
     Mat outMat2 = image.clone();
     vector<Point> points3 = polyPoints(pointVector, 3, 2.3, outMat2);
     outMats.push_back(outMat2);
-//    Mat outMat0 = image.clone();
-//    polyPoints(pointVector, 4, 1.9, outMat0);
-//    outMats.push_back(outMat0);
 }
 
-void findByContours2(Mat &image, vector<Point> &pointVector, vector<Point> &trapezoidPoints,
-                     vector<Mat> &outMats) {
-
-
-
+void findNoodleLamp(Mat &image, vector<Point> &pointVector, vector<Mat> &outMats) {
     // 使用Sobel算子计算梯度幅值
     Mat gradX, gradY, gradMag, grayImage;
     cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
@@ -186,8 +179,6 @@ void findByContours2(Mat &image, vector<Point> &pointVector, vector<Point> &trap
                 outMats.push_back(dst);
                 hasErode = true;
                 Mat kernelE = getStructuringElement(MORPH_ELLIPSE, Size(7, 7));
-//                Mat kernelD = getStructuringElement(MORPH_ELLIPSE, Size(5, 5));
-//                erode(dst, dst, kernelE);
                 morphologyEx(dst, dst, MORPH_OPEN, kernelE, Point(-1, -1),
                              1);
                 outMats.push_back(dst);
@@ -258,6 +249,7 @@ polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &out
         LOGE(LOG_TAG, "polyPoints null");
         return pointVector;
     }
+    if (pointVector.size() < k + 4) return pointVector;
     Mat pointsMat(pointVector);
     pointsMat.convertTo(pointsMat, CV_32F);
 
@@ -282,9 +274,10 @@ polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &out
     Scalar mean, stddev;
     meanStdDev(distances, mean, stddev);
     float threshold = mean[0] + stddevThreshold * stddev[0];
-    LOGD(LOG_TAG, "mean: %f stddev: %f  threshold : %f", mean[0], stddev[0], threshold);
+//    LOGD(LOG_TAG, "mean: %f stddev: %f  threshold : %f", mean[0], stddev[0], threshold);
     cv::Scalar colorScalar;
-    LOGD(LOG_TAG, "pointVector = %d", pointVector.size());
+    int size = pointVector.size();
+//    LOGD(LOG_TAG, "pointVector = %d", pointVector.size());
     // 输出离群点
     for (int i = pointsMat.rows - 1; i >= 0; i--) {
         if (distances[i] > threshold) {
@@ -294,7 +287,7 @@ polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &out
         }
     }
 
-    LOGD(LOG_TAG, "pointVector擦除离群点后 = %d", pointVector.size());
+    LOGD(LOG_TAG, "pointVector擦除离群点 = %d", pointVector.size() - size);
     vector<vec4f> data;
     for (int i = 0; i < pointVector.size(); i++) {
         cv::Scalar colorScalar;
@@ -341,7 +334,7 @@ Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color,
         thresh += 5;
         LOGD(LOG_TAG, "contours = %d   thresh = %d", contours.size(), thresh);
     }
-    outMats.push_back(morphology_image);
+//    outMats.push_back(morphology_image);
 
     sort(contours.begin(), contours.end(), compareContourAreas);
 
@@ -382,12 +375,12 @@ Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color,
 //            }
         } else {
             if (!hasErode) {
-                outMats.push_back(dst);
+//                outMats.push_back(dst);
                 hasErode = true;
 //                Mat kernelErodeMin = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
                 erode(dst, dst, kernelErode, Point(-1, -1), 1);
 //                erode(dst, dst, kernelErodeMin);
-                outMats.push_back(dst);
+//                outMats.push_back(dst);
             }
             cv::drawContours(dst, contours, static_cast<int>(i), cv::Scalar::all(255), -1);
         }
@@ -467,31 +460,30 @@ double distance(Point p1, Point p2) {
 }
 
 // 计算包含所有点的最小等腰梯形
-int getMinTrapezoid(Mat &image,
-                    const vector<Point> &points, vector<Point>
-                    &trapezoid4Points) {
-    if (points.empty()) {
+int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &trapezoid4Points) {
+    if (pointsSrc.empty()) {
         LOGE(LOG_TAG, "getMinTrapezoid null");
         return 0;
     }
+    vector<Point> points(pointsSrc);
+    polyPoints(points, 3, 1.9, image);
     vector<Point2i> hull;
     convexHull(points, hull);
     vector<double> angleVector;
     vector<bool> rightVector;
-//左右凸包最最靠边角点
+    //左右凸包最最靠边角点
     Point2i pointRight(0, 0), pointLeft(0, 0);
-// 计算凸包的中心点
+    // 计算凸包的中心点
     Moments mu = moments(hull);
     for (int i = 0; i < hull.size(); i++) {
         Point2i point1 = hull[i];
         Point2i point2 = hull[(i + 1) % hull.size()];
-// 计算两个点的连线的斜率
+         // 计算两个点的连线的斜率
         double slope = (double) (point2.y - point1.y) / (double) (point2.x - point1.x);
-// 计算斜率与水平方向的夹角
+        // 计算斜率与水平方向的夹角
         double angle = atan(slope) * 180 / CV_PI;
         angleVector.push_back(angle);
         rightVector.push_back(point1.x > mu.m10 / mu.m00);
-//        LOGV(LOG_TAG, "  angle = %f   slope = %f", angle, slope);
         putText(image, to_string(angle), point1, FONT_HERSHEY_SIMPLEX, 0.8, Scalar(0, 0, 0), 2);
         if (pointLeft.x > point1.x || pointLeft.x == 0) {
             pointLeft = point1;
@@ -503,9 +495,9 @@ int getMinTrapezoid(Mat &image,
     line(image, Point2i(mu.m10 / mu.m00, 0), Point2i(mu.m10 / mu.m00, image.rows),
          Scalar(255, 255, 255), 2);
 
-    double averageSlope = 80;
+    double averageSlope = 76;
     LOGD(LOG_TAG, "均值斜率：%f", averageSlope);
-//计算最接近均值斜率的斜线
+    //计算最接近均值斜率的斜线
     double closestAngleRight;
     double closestAngleLeft;
     double angleDiffFLagRight = 0;
@@ -545,24 +537,25 @@ int getMinTrapezoid(Mat &image,
     }
 
     double angleSelect = 0;
-    if (abs(closestAngleRight) > abs(closestAngleLeft)) {
-        angleSelect = abs(closestAngleRight);
-        pointRight.x = pointRight.x + 40;
+    if (abs(pointRight.x - mu.m10 / mu.m00) > abs(mu.m10 / mu.m00 - pointLeft.x)) {
+        pointRight.x = pointRight.x + 20;
         //取右边点
         int leftX = mu.m10 / mu.m00 - (pointRight.x - mu.m10 / mu.m00);
         pointLeft = Point(leftX, pointRight.y);
-
     } else {
-        pointLeft.x = pointLeft.x - 40;
-        angleSelect = abs(closestAngleLeft);
+        pointLeft.x = pointLeft.x - 20;
         int rightX = mu.m10 / mu.m00 + (mu.m10 / mu.m00 - pointLeft.x);
         pointRight = Point(rightX, pointLeft.y);
+    }
+    if (abs(closestAngleRight) > abs(closestAngleLeft)) {
+        angleSelect = abs(closestAngleRight);
+    } else {
+        angleSelect = abs(closestAngleLeft);
     }
     if (angleSelect <= 5) {
         LOGE(LOG_TAG, "左右均无有效斜边");
         return 0;
     }
-
     circle(image, pointRight,
            10, Scalar(0, 0, 0), 5);
     circle(image, pointLeft,
@@ -573,11 +566,11 @@ int getMinTrapezoid(Mat &image,
             minY = hull[i].y;
         }
     }
-// 计算AB连线的斜率
+    // 计算AB连线的斜率
     double slopeLeft = tan(-angleSelect * CV_PI / 180);
     double slopeRight = tan(angleSelect * CV_PI / 180);
 
-// 计算A点的x轴坐标
+    // 计算A点的x轴坐标
     double leftTopX = pointLeft.x - (pointLeft.y - minY) / slopeLeft;
     double rightTopX = pointRight.x - (pointRight.y - minY) / slopeRight;
 

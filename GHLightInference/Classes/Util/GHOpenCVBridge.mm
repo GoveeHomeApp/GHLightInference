@@ -141,9 +141,9 @@ vector<LightPoint> resLp;
     }
 }
 
-- (NSString *)caculateNumByStep:(NSInteger)stepCount {
+- (NSString *)caculateNumByStep:(NSInteger)stepCount bizType:(NSInteger)type {
     string jsonStr = "";
-    jsonStr = sortStripByStep((int)stepCount, resLp, radiusCircle, outMats);
+    jsonStr = sortStripByStep((int)stepCount, resLp, type, outMats);
     NSString * res = [NSString stringWithUTF8String:jsonStr.c_str()];
     return res;
 }

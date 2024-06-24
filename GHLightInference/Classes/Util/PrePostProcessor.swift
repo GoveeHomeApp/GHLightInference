@@ -153,7 +153,7 @@ public class PrePostProcessor : NSObject {
                 bbox.backgroundColor = UIColor.clear
                 bbox.layer.borderColor = UIColor.red.cgColor
                 bbox.layer.borderWidth = 1
-                if pred.score > 0.25 {
+                if pred.score > 0.20 {
                     imageView.addSubview(bbox)
                 }
             case "green":
@@ -161,7 +161,7 @@ public class PrePostProcessor : NSObject {
                 bbox.backgroundColor = UIColor.clear
                 bbox.layer.borderColor = UIColor.green.cgColor
                 bbox.layer.borderWidth = 1
-                if pred.score > 0.25 {
+                if pred.score > 0.20 {
                     imageView.addSubview(bbox)
                 }
             case "blue":

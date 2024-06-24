@@ -32,7 +32,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)createLightPointArray:(NSArray *)poArray;
 
 // 识别完位置 计算灯序
-- (NSString *)caculateNumByStep:(NSInteger)stepCount;
+/// @param bizType: 业务类型 0-70XC 1-682X
+- (NSString *)caculateNumByStep:(NSInteger)stepCount bizType:(NSInteger)type;
 
 // 获取last outlet
 - (UIImage *)showLastOutlet;

@@ -13,8 +13,7 @@ using namespace std;
 void findByContours(Mat &image, vector<cv::Point> &points,
                     vector<Mat> &outMats);
 
-void findByContours2(Mat &image, vector<cv::Point> &points, vector<cv::Point> &trapezoidPoints,
-                     vector<Mat> &outMats);
+void findNoodleLamp(Mat &image, vector<cv::Point> &points, vector<Mat> &outMats);
 
 Mat removeLineContours(const Mat &binary);
 

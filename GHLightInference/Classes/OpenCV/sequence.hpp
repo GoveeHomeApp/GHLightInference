@@ -39,6 +39,8 @@ int getScoreMin();
 
 int getIcNum();
 
+int checkIsGreen(int index);
+
 /**
  * 最大得分
  */
@@ -52,7 +54,8 @@ vector<int> getSameColorVector();
 /**
  * 根据得分计算灯序号
  */
-void setLightIndex(LightPoint &point, int score);
+void setLightIndex(LightPoint &point, int score, int lightType);
 
-int getLightIndex(int score);
+int getLightIndex(int score, int lightType);
+
 #endif
