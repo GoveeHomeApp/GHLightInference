@@ -22,7 +22,7 @@ void findByContours(Mat &image, vector<Point> &pointVector, int icNum,
     std::vector<cv::Mat> hsvChannels;
     cv::split(hsv, hsvChannels);
 //    // 定义增强系数
-    double sFactor = 1.3; // 饱和度增强系数
+    double sFactor = 1.2; // 饱和度增强系数
 //    double vFactor = 1.3; // 亮度增强系数
 //
 //    // 创建S和V通道的LUT
@@ -89,7 +89,7 @@ void findByContours(Mat &image, vector<Point> &pointVector, int icNum,
         LOGV("contourArea", "drawColorMask contourArea: %f  radius: %f", contourArea, radius);
     }
     LOGD(LOG_TAG, "合并点位前 pointVector =%d ", pointVector.size());
-    mergePoints(pointVector, 6);
+    mergePoints(pointVector, 3);
 
     LOGD(LOG_TAG, "合并点位后 pointVector =%d ", pointVector.size());
 
@@ -311,11 +311,11 @@ Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color,
                     vector<Mat> &outMats) {
     Mat morphology_image, threshold_image;
     int contoursSize = 1200;
-    int thresh = 205;
+    int thresh = 200;
     // 寻找轮廓
     std::vector<std::vector<Point>> contours;
 //    outMats.push_back(src);
-    while (contoursSize > 125 && thresh < 225) {
+    while (contoursSize > 165 && thresh < 225) {
         threshold(src, threshold_image, thresh, 255, THRESH_BINARY);
         morphology_image = morphologyImage(threshold_image, 5, 7);
         findContours(morphology_image, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
@@ -354,7 +354,7 @@ Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color,
         meanStdDev(hue, mean, stddev, mask);
         LOGV(LOG_TAG, " contourArea= %f  mean= %f stddev= %f  ", contourArea, mean[0], stddev[0]);
 
-        if (contourArea > 400 || stddev[0] < 4) {
+        if (contourArea > 400 || stddev[0] < 2) {
             LOGV(LOG_TAG, "超出范围或者方差太小 contourArea= %f stddev= %f", contourArea,
                  stddev[0]);
         } else if (contourArea >= 230) {
@@ -366,10 +366,10 @@ Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color,
             if (!hasErode) {
 //                outMats.push_back(dst);
                 hasErode = true;
-//                Mat kernelErodeMin = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-                erode(dst, dst, kernelErode, Point(-1, -1), 1);
-//                erode(dst, dst, kernelErodeMin);
-//                outMats.push_back(dst);
+                Mat kernelErodeMin = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
+//                erode(dst, dst, kernelErode, Point(-1, -1), 1);
+                erode(dst, dst, kernelErodeMin);
+                outMats.push_back(dst);
             }
             cv::drawContours(dst, contours, static_cast<int>(i), cv::Scalar::all(255), -1);
         }
@@ -457,7 +457,7 @@ int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &t
     }
     vector<Point> points(pointsSrc);
     polyPoints(points,
-               3, 1.7, image);
+               3, 1.9, image);
     vector<Point2i> hull;
     convexHull(points, hull);
     vector<double> angleVector;
