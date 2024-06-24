@@ -9,8 +9,9 @@
 /**
  * 查找灯带光点
  */
-void findByContours(Mat &image, vector<Point> &pointVector,
+void findByContours(Mat &image, vector<Point> &pointVector, int icNum,
                     vector<Mat> &outMats) {
+    LOGD(LOG_TAG, "=====查找灯带光点");
     // 应用高斯模糊
 //    cv::GaussianBlur(image, image, cv::Size(3, 3), 0);
     // 将图像从BGR转换到HSV颜色空间
@@ -98,7 +99,7 @@ void findByContours(Mat &image, vector<Point> &pointVector,
 //    outMats.push_back(outMat1);
 
     Mat outMat2 = image.clone();
-    vector<Point> points3 = polyPoints(pointVector, 3, 2.3, outMat2);
+    polyPoints(pointVector, 3, 2.3, outMat2);
     outMats.push_back(outMat2);
 }
 
@@ -214,7 +215,7 @@ void findNoodleLamp(Mat &image, vector<Point> &pointVector, vector<Mat> &outMats
 
     Mat outMat2 = image.clone();
 
-    vector<Point> points3 = polyPoints(pointVector, 3, 2.2, outMat2);
+    polyPoints(pointVector, 3, 2.2, outMat2);
 
     outMats.push_back(outMat2);
 }
@@ -242,14 +243,16 @@ Mat removeLineContours(const Mat &binary) {
 }
 
 
-vector<Point>
+vector<int>
 polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &outMat) {
-    // Convert points to a matrix for KMeans clustering
+    vector<int> eraseVector;
+// Convert points to a matrix for KMeans clustering
     if (pointVector.empty()) {
         LOGE(LOG_TAG, "polyPoints null");
-        return pointVector;
+        return eraseVector;
     }
-    if (pointVector.size() < k + 4) return pointVector;
+    if (pointVector.size() < k + 4)
+        return eraseVector;
     Mat pointsMat(pointVector);
     pointsMat.convertTo(pointsMat, CV_32F);
 
@@ -259,7 +262,7 @@ polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &out
            TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 12, 0.1),
            3, KMEANS_PP_CENTERS, centers);
 
-    // 计算每个数据点到其对应聚类中心的距离
+// 计算每个数据点到其对应聚类中心的距离
     vector<float> distances;
     map<int, vector<float>> distancesMap;
     for (int i = 0; i < pointsMat.rows; i++) {
@@ -277,45 +280,31 @@ polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &out
 //    LOGD(LOG_TAG, "mean: %f stddev: %f  threshold : %f", mean[0], stddev[0], threshold);
     cv::Scalar colorScalar;
     int size = pointVector.size();
-//    LOGD(LOG_TAG, "pointVector = %d", pointVector.size());
+
     // 输出离群点
     for (int i = pointsMat.rows - 1; i >= 0; i--) {
         if (distances[i] > threshold) {
             colorScalar = Scalar(0, 0, 0);
             circle(outMat, pointVector[i], 10, colorScalar, 2);
             pointVector.erase(pointVector.begin() + i);
+            eraseVector.push_back(i);
         }
     }
 
-    LOGD(LOG_TAG, "pointVector擦除离群点 = %d", pointVector.size() - size);
+    LOGD(LOG_TAG, "pointVector擦除离群点 = %d", size - pointVector.size());
     vector<vec4f> data;
     for (int i = 0; i < pointVector.size(); i++) {
-        cv::Scalar colorScalar;
         if (labels.at<int>(i) == 0) {
-            colorScalar = Scalar(0, 0, 255, 160);
-            circle(outMat, pointVector[i], 7, colorScalar, 2);
+            circle(outMat, pointVector[i], 7, Scalar(0, 0, 255, 160), 2);
         } else if (labels.at<int>(i) == 1) {
-            colorScalar = Scalar(0, 255, 0, 160);
-            circle(outMat, pointVector[i], 7, colorScalar, 2);
+            circle(outMat, pointVector[i], 7, Scalar(0, 255, 0, 160), 2);
         } else {
-            colorScalar = Scalar(255, 0, 0, 160);
-            circle(outMat, pointVector[i], 7, colorScalar, 2);
+            circle(outMat, pointVector[i], 7, Scalar(255, 0, 0, 160), 2);
         }
         data.push_back(vec4f{pointVector[i].x * 1.f, pointVector[i].y * 1.f});
     }
 
-    // int Run(TVector* V, const uint dim, const Float eps, const uint min, const DistanceFunc& disfunc = [](const T& t1, const T& t2)->Float { return 0; });
-//    auto dbscan = DBSCAN<vec4f, float>();
-//    dbscan.Run(&data, 2, stddev[0] + 20, 3);
-//    auto noise = dbscan.Noise;
-//    auto clusters = dbscan.Clusters;
-//    LOGW(LOG_TAG, "data %d 孤立点有 %d  clusters %d", data.size(), noise.size(), clusters.size());
-//    for (int i = noise.size() - 1; i >= 0; i--) {
-//        LOGW(LOG_TAG, " clusters %d", noise[i]);
-//        circle(outMat, pointVector[noise[i]], 6, Scalar(255, 255, 255), 3);
-//        pointVector.erase(pointVector.begin() + i);
-//    }
-    return pointVector;
+    return eraseVector;
 }
 
 Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color,
@@ -451,11 +440,12 @@ Mat morphologyImage(Mat &image, int openKernelSize,
                                              Size(dilateKernelSize, dilateKernelSize));
     morphologyEx(outMat, outMat, MORPH_DILATE, dilateKernel, Point(-1, -1),
                  1);
-    return outMat;
+    return
+            outMat;
 }
 
 // 计算两点之间的距离
-double distance(Point p1, Point p2) {
+double distanceP(Point p1, Point p2) {
     return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
 }
 
@@ -466,7 +456,8 @@ int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &t
         return 0;
     }
     vector<Point> points(pointsSrc);
-    polyPoints(points, 3, 1.9, image);
+    polyPoints(points,
+               3, 1.9, image);
     vector<Point2i> hull;
     convexHull(points, hull);
     vector<double> angleVector;
@@ -478,7 +469,7 @@ int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &t
     for (int i = 0; i < hull.size(); i++) {
         Point2i point1 = hull[i];
         Point2i point2 = hull[(i + 1) % hull.size()];
-         // 计算两个点的连线的斜率
+        // 计算两个点的连线的斜率
         double slope = (double) (point2.y - point1.y) / (double) (point2.x - point1.x);
         // 计算斜率与水平方向的夹角
         double angle = atan(slope) * 180 / CV_PI;

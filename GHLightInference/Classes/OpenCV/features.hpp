@@ -7,18 +7,6 @@
 using namespace cv;
 using namespace std;
 
-/**补全等级*/
-enum COMPLETION_LEVEL {
-    /**仅做tf识别到的点补全*/
-    COMPLETION_INTERVAL = 0,
-
-    /**对tf识别到的点以及单个间隔点补全*/
-    COMPLETION_INTERVAL_INFERRED = 2,
-
-    /**根据线性方向进行全量补全*/
-    COMPLETION_LINE_ALL = 2
-};
-
 enum CUS_COLOR_TYPE {
     E_W = 0,
     E_RED = 1,
@@ -30,15 +18,15 @@ enum STEP_FRAME {
 };
 enum LIGHT_STATUS {
     NORMAL = 0,
-    SAME_COLOR = 1,
-    SAME_INDEX = 2,
-    OUT_BOUNDARY_MIN = 3,
-    OUT_BOUNDARY_MAX = 4,
-    INFERRED_EMPTY_POINT = 5,
-    INFERRED_POINT = 6,
-    EMPTY_POINT = 7
-
+    EMPTY_POINT = 1,
+    ERASE_POINT = 2
 };
+enum LIGHT_TYPE {
+    TYPE_H70CX_3D = 0,
+    TYPE_H70CX_2D = 1,
+    TYPE_H682X = 2,
+};
+
 
 class LightPoint {
 public:
@@ -79,41 +67,119 @@ public:
     }
 
     Mat buildRect(Mat &src, cv::Rect &roi) {
+        if (src.empty()) {
+            LOGE(LOG_TAG, "buildRect src is empty!");
+        }
         int x = point2f.x; // 指定坐标x
         int y = point2f.y; // 指定坐标y
         //Rect_(_Tp _x, _Tp _y, _Tp _width, _Tp _height);
-        roi = cv::Rect(x - with / 2, y - height / 2, with, height);
-
+        roi = cv::Rect();
+        //  x - with / 2, y - height / 2, with, height
         if (x - with / 2 < 0) {
-            roi.x = 0;
-            LOGE(LOG_TAG, "x<0");
+            roi.x = 1;
+        } else {
+            roi.x = x - with / 2 + 1;
         }
         if (y - height / 2 < 0) {
-            roi.y = 0;
-            LOGE(LOG_TAG, "y<0");
+            roi.y = 1;
+        } else {
+            roi.y = y - height / 2 + 1;
         }
         if (roi.x + roi.width > src.cols) {
             LOGE(LOG_TAG, "x>cols with:%d  src-cols: %d   x: %d ", (roi.x + roi.width), src.cols,
                  roi.x);
-            roi.width = src.cols - roi.x;
+            roi.width = src.cols - roi.x - 1;
         }
+
         if (roi.y + roi.height > src.rows) {
             LOGE(LOG_TAG, "y>rows height:%d  src-rows: %d", (roi.y + roi.height), src.rows);
-            roi.height = src.rows - roi.y;
+            roi.height = src.rows - roi.y - 1;
         }
+        if (roi.width < 5) roi.width = 5;
+        if (roi.height < 5) roi.height = 5;
+//        LOGD(LOG_TAG, "roi = %d x %d, w = %d, h = %d, src = %d x %d", roi.x, roi.y, roi.width,
+//             roi.height, src.cols, src.rows);
         Mat region = src(roi);
         return region;
     }
+
+    // 重载==运算符以支持比较
+    bool operator==(const LightPoint &other) const {
+        return lightIndex == other.lightIndex && point2f.x == other.point2f.x &&
+               point2f.y == other.point2f.y;
+    }
 };
+
+/**
+ * 记录当前处理流程中的状态集合
+ */
+class LampBeadsProcessor {
+public:
+    int scoreMin;
+    int scoreMax;
+    int maxFrameStep;
+    int averageDistance;
+
+    /**
+     * 同色得分点
+     * key:得分
+     * value：index集合
+     */
+    map<int, vector<int>> sameSerialNumMap;
+    /**
+     * 红色非序列灯珠集合
+     */
+    vector<LightPoint> redSameVector;
+
+    /**
+     * 坐标集合
+     */
+    vector<Point2i> pointXys;
+
+    /**
+     * 绿色非序列灯珠集合
+     */
+    vector<LightPoint> greenSameVector;
+    /**
+    * 得分错点集合
+    */
+    vector<LightPoint> errorSerialVector;
+    /**
+     * 正常序列点位
+     */
+    vector<LightPoint> normalPoints;
+    /**
+      * 所有点位集合
+      */
+    vector<LightPoint> totalPoints;
+public:
+    ~LampBeadsProcessor() {
+    }
+
+
+    LampBeadsProcessor() {
+    }
+
+    LampBeadsProcessor(int scoreMin, int scoreMax, int maxFrameStep) {
+        this->scoreMin = scoreMin;
+        this->scoreMax = scoreMax;
+        this->maxFrameStep = maxFrameStep;
+    }
+};
+
+/**
+ * 统计所有得分
+ * @param processor
+ */
+int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &processor);
 
 /**
  * 对齐并输出640正方形图像
  * @param frameStep 当前轮数
  * @param originalMat 输入原图
- * @param outMats 输出流程中的测试图像
  * @return
  */
-Mat alignResize(int frameStep, Mat &originalMat, vector<Mat> &outMats);
+Mat alignResize(int frameStep, Mat &originalMat);
 
 /**
  * 根据定义好的步骤进行灯带排序
@@ -136,7 +202,7 @@ LightPoint meanColor(Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColor
  * 对灯带光点排序
  */
 vector<LightPoint>
-checkLightStrip(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points);
+sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points);
 
 Mat alignImg(Mat &src, Mat &trans, bool back4Matrix);
 
@@ -145,6 +211,14 @@ Mat alignImg(Mat &src, Mat &trans, bool back4Matrix);
  */
 vector<LightPoint>
 findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &outMats);
+
+/**删除不连续错点*/
+void deleteDiscontinuousPoints(LampBeadsProcessor &processor);
+
+/**
+ * 删除离群点+构建梯形
+ */
+void deleteEstablishGroupPoints(Mat &src, vector<Mat> &outMats);
 
 /**
  * 从小到大排序
@@ -157,6 +231,32 @@ bool compareScore(const LightPoint &p1, const LightPoint &p2);
 string lightPointsToJson(const vector<LightPoint> &points);
 
 /**
+ * 处理同色得分点
+ * @param samePoints
+ */
+void
+decideSameScorePoint(LampBeadsProcessor &processor, Mat &src, vector<Mat> &outMats);
+
+/**
+ * 计算点位平均距离
+ */
+double calculateAverageDistance(LampBeadsProcessor &processor);
+
+/**
+ * 推测中间夹点
+ */
+void
+decisionCenterPoints(LampBeadsProcessor &processor, Mat &src);
+
+/**
+ * 从红绿固定点和错点中推测点位
+ */
+void decisionRightLeftPoints(LampBeadsProcessor &processor);
+
+/**处理剩余无序点位*/
+void decisionRemainingPoints(LampBeadsProcessor &processor);
+
+/**
  * Point2i集合输出json
  */
 string point2iToJson(const vector<Point2i> &points);
@@ -165,22 +265,41 @@ string splicedJson(string a, string b);
 
 bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C);
 
-LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, vector<LightPoint> &redSameVector,
-                           vector<LightPoint> &greenSameVector);
+LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, LampBeadsProcessor &processor);
 
 bool compareIndex(const LightPoint &p1, const LightPoint &p2);
 
-LightPoint syncRectPoints(Point2i &center, double minDistance,
-                          vector<LightPoint> &points);
+/**
+ * 找出最可能点位
+ */
+LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
+                    LampBeadsProcessor &processor);
 
+/**
+ * 从集合中查找点位
+ */
+LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDistance,
+                            vector<LightPoint> &points);
+
+/**
+ * 根据水平方向推断右边点
+ */
 LightPoint inferredRight(LightPoint &curLPoint,
                          LightPoint &lastLPoint,
-                         LightPoint &nextLPoint, int i, vector<LightPoint> &pointsNew,
-                         vector<LightPoint> &redSameVector, vector<LightPoint> &greenSameVector);
+                         LightPoint &nextLPoint, int i, LampBeadsProcessor &processor);
 
+/**
+ * 根据水平方向推断左边点
+ */
 LightPoint inferredLeft(LightPoint &curLPoint,
                         LightPoint &lastLPoint,
-                        LightPoint &nextLPoint, int i, vector<LightPoint> &pointsNew,
-                        vector<LightPoint> &redSameVector, vector<LightPoint> &greenSameVector);
+                        LightPoint &nextLPoint, int i, LampBeadsProcessor &processor);
+
+/**
+ * 推测中间点
+ * @param A 后一个点
+ * @param B 前一个点
+ */
+LightPoint inferredCenter(LampBeadsProcessor &processor, LightPoint &A, LightPoint &B);
 
 #endif

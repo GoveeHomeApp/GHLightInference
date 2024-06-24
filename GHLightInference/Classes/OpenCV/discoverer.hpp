@@ -10,12 +10,14 @@ using namespace std;
 /**
  * 根据轮廓识别点位
  */
-void findByContours(Mat &image, vector<cv::Point> &points,
+void findByContours(Mat &image, vector<cv::Point> &points, int icNum,
                     vector<Mat> &outMats);
 
 void findNoodleLamp(Mat &image, vector<cv::Point> &points, vector<Mat> &outMats);
 
 Mat removeLineContours(const Mat &binary);
+
+double distanceP(cv::Point p1, cv::Point p2);
 
 /**
  * 二值化灯珠轮廓开运算和腐蚀处理
@@ -35,7 +37,7 @@ Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color, vector<Mat> &out
 /**
  * 离群点检测
  */
-vector<cv::Point>
+vector<int>
 polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &outMat);
 
 /**

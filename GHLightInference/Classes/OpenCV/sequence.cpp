@@ -338,7 +338,7 @@ int getIcNum() {
 /**
  * 根据得分计算灯序号
  */
-void setLightIndex(LightPoint &point, int score, int lightType) {
+void syncLightIndex(LightPoint &point, int score, int lightType) {
     point.lightIndex = getLightIndex(score, lightType);
 }
 
@@ -347,7 +347,7 @@ int getLightIndex(int score, int lightType) {
     int lightIndex = 0;
     vector<int> sameColorVector = getSameColorVector();
     int scoreMin = getScoreMin();
-    if (lightType == 0) {
+    if (lightType == TYPE_H70CX_2D || lightType == TYPE_H70CX_3D) {
         if (scoreP > sameColorVector[1]) {
             lightIndex = scoreP - scoreMin - 2;
         } else {

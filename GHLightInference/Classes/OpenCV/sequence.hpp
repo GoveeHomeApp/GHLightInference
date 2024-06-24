@@ -54,7 +54,7 @@ vector<int> getSameColorVector();
 /**
  * 根据得分计算灯序号
  */
-void setLightIndex(LightPoint &point, int score, int lightType);
+void syncLightIndex(LightPoint &point, int score, int lightType);
 
 int getLightIndex(int score, int lightType);
 
