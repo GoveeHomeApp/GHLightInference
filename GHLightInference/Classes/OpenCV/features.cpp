@@ -367,7 +367,9 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
             //70dx的序列是奇数点位，不满足的话就是推错点了
             processor.errorSerialVector.push_back(pPoints[i]);
         } else {
-            processor.normalPoints.push_back(pPoints[i]);
+            if (processor.sameSerialNumMap[pPoints[i].lightIndex].empty()) {
+                processor.normalPoints.push_back(pPoints[i]);
+            }
             processor.sameSerialNumMap[pPoints[i].lightIndex].push_back(normalIndex);
             normalIndex++;
         }
@@ -438,7 +440,7 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
             continue;
         }
         if (int size = processor.sameSerialNumMap[normalPoint.lightIndex].size() > 1) {
-            LOGW(LOG_TAG, "当前点重复，size=%d", size);
+//            LOGW(LOG_TAG, "当前点重复，size=%d", size);
         }
         LightPoint centerP = inferredCenter(processor, normalPoint, lastPoint);
         if (centerP.errorStatus != EMPTY_POINT && centerP.lightIndex < getIcNum() &&
@@ -456,7 +458,7 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
 void decisionRightLeftPoints(LampBeadsProcessor &processor) {
     bool enable4BeginLeft = true;//起点往前补点
     for (auto it = processor.totalPoints.begin();
-         it != processor.totalPoints.end(); ++it) {
+         it <= processor.totalPoints.end(); ++it) {
         auto beginLP = processor.totalPoints.begin();
         auto endLP = processor.totalPoints.end();
         if (it == beginLP) {
@@ -546,7 +548,7 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor) {
                         continue;
                     }
                     curLPoint = processor.totalPoints[index];
-                    if (curLPoint.lightIndex > getIcNum()) {
+                    if (curLPoint.lightIndex >= getIcNum()) {
                         inferredNextDiff = 0;
                         continue;
                     }
@@ -571,6 +573,7 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor) {
             }
             int offset = nextRightAdd + lastLeftAdd;
             it = it + offset;
+            if (it->lightIndex > getIcNum())break;
         }
     }
 }
