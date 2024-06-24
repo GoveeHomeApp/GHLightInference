@@ -74,7 +74,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
         Mat src = frameStepMap[frameStep].clone();
         if (!pPointXys.empty())pPointXys.clear();
         if (resultObjects.empty()) {
-            findByContours(src, pPointXys, getIcNum(),outMats);
+            findByContours(src, pPointXys, getIcNum(), outMats);
         } else {
             for (int i = 0; i < resultObjects.size(); i++) {
                 LightPoint curPoint = resultObjects[i];
@@ -441,7 +441,8 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
             LOGW(LOG_TAG, "当前点重复，size=%d", size);
         }
         LightPoint centerP = inferredCenter(processor, normalPoint, lastPoint);
-        if (centerP.errorStatus != EMPTY_POINT)
+        if (centerP.errorStatus != EMPTY_POINT && centerP.lightIndex < getIcNum() &&
+            centerP.lightIndex >= 0)
             processor.totalPoints.push_back(centerP);
     }
     LOGD(LOG_TAG, "normalPoints = %d totalPoints = %d", processor.normalPoints.size(),
@@ -461,13 +462,13 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor) {
         if (it == beginLP) {
             LightPoint curLPoint = processor.totalPoints[0];
             LightPoint nextLPoint = processor.totalPoints[1];
-
             int inferredNextDiff = nextLPoint.lightIndex - curLPoint.lightIndex;
             //第一个点
             if (it->lightIndex > 1 && enable4BeginLeft) {
                 LOGD(LOG_TAG, "第1个点之前缺失，begin : %d", it->lightIndex);
                 LightPoint inferredPoint = inferredAB2Next(nextLPoint, curLPoint, processor);
-                if (inferredPoint.errorStatus != EMPTY_POINT) {
+                if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
+                    inferredPoint.lightIndex < getIcNum()) {
                     processor.totalPoints.insert(processor.totalPoints.begin(),
                                                  inferredPoint);
                     LOGD(LOG_TAG, "补充点位 = %d  ===》重新遍历，直到往前补点失败",
@@ -488,7 +489,10 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor) {
                     while (inferredNextDiff > 1) {
                         LightPoint inferredPoint = inferredAB2Next(nextNextLPoint, nextLPoint,
                                                                    processor);
-                        if (inferredPoint.errorStatus != EMPTY_POINT) {
+                        if (inferredPoint.errorStatus != EMPTY_POINT &&
+                            inferredPoint.lightIndex >= 0 &&
+                            inferredPoint.lightIndex < getIcNum()) {
+
                             LOGD(LOG_TAG, "补充点位 = %d", inferredPoint.lightIndex);
                             //从next（i+1）的前一个插入
                             processor.totalPoints.insert(processor.totalPoints.begin() + 1,
@@ -524,7 +528,8 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor) {
                     //首先往右边推断
                     inferredPoint = inferredRight(curLPoint, lastLPoint, nextLPoint, i,
                                                   processor);
-                    if (inferredPoint.errorStatus != EMPTY_POINT) {
+                    if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
+                        inferredPoint.lightIndex < getIcNum()) {
                         lastLPoint = curLPoint;
                         curLPoint = inferredPoint;
                         inferredNextDiff--;
@@ -535,12 +540,13 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor) {
                     }
                 } else {
                     //从最右边开始往左边补点
-//                    auto next2Cur = std::find(processor.totalPoints.begin(),
-//                                              processor.totalPoints.end(), nextLPoint);
-//                    int index = distance(processor.totalPoints.begin(), next2Cur);
                     int index = i + 1 + nextRightAdd;
+                    if (index > processor.totalPoints.size() - 2 || index < 1) {
+                        inferredNextDiff = 0;
+                        continue;
+                    }
                     curLPoint = processor.totalPoints[index];
-                    if (index > processor.totalPoints.size() - 2) {
+                    if (curLPoint.lightIndex > getIcNum()) {
                         inferredNextDiff = 0;
                         continue;
                     }
@@ -626,7 +632,8 @@ void decisionRemainingPoints(LampBeadsProcessor &processor) {
         if (nextDiff == 2) {
             //再次处理中间点位
             LightPoint centerP = inferredCenter(processor, nextLPoint, curLPoint);
-            if (centerP.errorStatus != EMPTY_POINT) {
+            if (centerP.errorStatus != EMPTY_POINT && centerP.lightIndex < getIcNum() &&
+                centerP.lightIndex >= 0) {
                 //往后插入一个点
                 processor.totalPoints.push_back(centerP);
             }
@@ -736,7 +743,8 @@ LightPoint inferredRight(LightPoint &curLPoint,
     }
     if (abcHorizontal) {
         LightPoint inferredPoint = inferredAB2Next(lastLPoint, curLPoint, processor);
-        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0) {
+        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
+            inferredPoint.lightIndex < getIcNum()) {
             LOGD(LOG_TAG, "【Right】推断成功：%d i = %d", inferredPoint.lightIndex,
                  i);
             processor.totalPoints.insert(processor.totalPoints.begin() + i + 1, inferredPoint);
@@ -770,7 +778,9 @@ LightPoint inferredLeft(LightPoint &curLPoint,
     if (abcHorizontal) {
         LightPoint inferredPoint = inferredAB2Next(nextLPoint, curLPoint, processor);
         LOGD(LOG_TAG, "【Left】2---ABC水平,推断BC中间点 = %d ", inferredPoint.lightIndex);
-        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0) {
+        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
+            inferredPoint.lightIndex < getIcNum()) {
+
             LOGD(LOG_TAG, "【补点流程C】推断序号成功：%d  i = %d", inferredPoint.lightIndex, i);
             //todo:review是否会角标越界
             processor.totalPoints.insert(processor.totalPoints.begin() + i, inferredPoint);
@@ -846,7 +856,8 @@ LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, LampBeadsProcessor &pro
             diffSegmentLenX * diffSegmentLenX + diffSegmentLenY * diffSegmentLenY);
 
     //找出最接近的点位
-    LightPoint inferredPoint = findLamp(center, distanceMin, true, inferredLightIndex, processor);
+    LightPoint inferredPoint = findLamp(center, distanceMin, true,
+                                        inferredLightIndex, processor);
     return inferredPoint;
 }
 

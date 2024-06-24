@@ -457,7 +457,7 @@ int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &t
     }
     vector<Point> points(pointsSrc);
     polyPoints(points,
-               3, 1.9, image);
+               3, 1.7, image);
     vector<Point2i> hull;
     convexHull(points, hull);
     vector<double> angleVector;

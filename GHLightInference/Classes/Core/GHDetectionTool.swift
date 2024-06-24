@@ -235,7 +235,11 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             print("\n log.f ============= 开始取一帧")
             if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer),let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
                 self.preImageArray.append(scaleImage)
-                DispatchQueue.main.asyncAfter(deadline: .now()+0.1) {
+                #if DEBUG
+                self.imageView.image = scaleImage
+                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+                #endif
+                DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
                     self.capFinishHandler?()
                 }
             }
@@ -339,7 +343,7 @@ extension GHDetectionTool {
                     self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                     var poArr: [PredictObject] = []
                     var ct = 0
-                    for pre in nmsPredictions.filter({ $0.score > 0.25 && $0.classIndex != 2 }) {
+                    for pre in nmsPredictions.filter({ $0.score > 0.2 && $0.classIndex != 2 }) {
                         ct+=1
                         let po = PredictObject()
                         po.type = pre.classIndex
@@ -376,14 +380,14 @@ extension GHDetectionTool {
                             #if DEBUG
                             self.resPointView.backgroundColor = UIColor.white
                             for basRes in pt.lightPoints {
-                                print("log.f =========== point x:\(basRes.x/12) y:\(basRes.y/8) index:\(basRes.index)")
+//                                print("log.f =========== point x:\(basRes.x/12) y:\(basRes.y/8) index:\(basRes.index)")
                                 // frame需要转换！！！
                                 let rectView = UIView(frame: CGRect(x: basRes.x/12, y: basRes.y/8, width: 2, height: 2))
                                 rectView.backgroundColor = UIColor.green
                                 self.resPointView.addSubview(rectView)
                             }
                             for traRes in pt.trapezoidalPoints {
-                                print("log.f =========== point x:\(traRes.x/12) y:\(traRes.y/8) location:\(traRes.pName)")
+//                                print("log.f =========== point x:\(traRes.x/12) y:\(traRes.y/8) location:\(traRes.pName)")
                                 // frame需要转换！！！
                                 let rectView = UIView(frame: CGRect(x: traRes.x/12, y: traRes.y/8, width: 2, height: 2))
                                 rectView.backgroundColor = UIColor.blue
