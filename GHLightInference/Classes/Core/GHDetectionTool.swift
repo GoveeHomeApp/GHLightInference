@@ -174,7 +174,11 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.frameHandler = { [weak self] step in
             guard let `self` = self else { return }
             if let _ = self.transaction { //正常transaction
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                var second = 0.5
+                if step == 0 {
+                    second = 2 // 第一帧延时取
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + second) {
                     self.captureOneFrame()
                 }
             }
@@ -319,8 +323,9 @@ extension GHDetectionTool {
     }
     
     func runDetection() {
-        // 只对第一张图进行识别
-        if let image = self.afterImgArray.first {
+        // 只对第二张图进行识别
+        if self.afterImgArray.count > 1 {
+            let image = self.afterImgArray[1]
             let imageView = self.imageView
             self.imageView.image = image
             let imgScaleX = Double(image.size.width / CGFloat(PrePostProcessor.inputWidth));
@@ -380,14 +385,12 @@ extension GHDetectionTool {
                             #if DEBUG
                             self.resPointView.backgroundColor = UIColor.white
                             for basRes in pt.lightPoints {
-//                                print("log.f =========== point x:\(basRes.x/12) y:\(basRes.y/8) index:\(basRes.index)")
                                 // frame需要转换！！！
                                 let rectView = UIView(frame: CGRect(x: basRes.x/12, y: basRes.y/8, width: 2, height: 2))
                                 rectView.backgroundColor = UIColor.green
                                 self.resPointView.addSubview(rectView)
                             }
                             for traRes in pt.trapezoidalPoints {
-//                                print("log.f =========== point x:\(traRes.x/12) y:\(traRes.y/8) location:\(traRes.pName)")
                                 // frame需要转换！！！
                                 let rectView = UIView(frame: CGRect(x: traRes.x/12, y: traRes.y/8, width: 2, height: 2))
                                 rectView.backgroundColor = UIColor.blue

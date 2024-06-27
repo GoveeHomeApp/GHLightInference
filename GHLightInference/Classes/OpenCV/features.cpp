@@ -30,6 +30,11 @@ unordered_map<int, vector<LightPoint>> pointsStepMap;
 unordered_map<int, Mat> frameStepMap;
 //识别点的区域范围 4个点
 int pointsAreaTop = -1, pointsAreaLeft = -1, pointsAreaRight = -1, pointsAreaBottom = -1;
+/**
+* 得分错点集合
+*/
+vector<LightPoint> errorSerialVector;
+unordered_map<int, vector<LightPoint>> sequenceTypeMap;
 
 /**
  * 对齐并输出640正方形图像
@@ -47,15 +52,25 @@ Mat alignResize(int frameStep, Mat &originalMat) {
         resize(alignMat, srcResize, newSize);
         frameStepMap[frameStep] = alignMat.clone();
     } else {
-        pointsStepMap.clear();
-        frameStepMap.clear();
-        pPoints.clear();
-        pointsAreaTop = -1, pointsAreaLeft = -1, pointsAreaRight = -1, pointsAreaBottom = -1;
+        release();
         resize(originalMat.clone(), srcResize, newSize);
         alignMat = originalMat.clone();
         frameStepMap[frameStep] = alignMat.clone();
     }
     return srcResize;
+}
+
+void release() {
+    lightType = 0;
+    pointsStepMap.clear();
+    frameStepMap.clear();
+    pPointXys.clear();
+    pPointXys.shrink_to_fit();
+    pPoints.clear();
+    pPoints.shrink_to_fit();
+    pointsAreaTop = -1, pointsAreaLeft = -1, pointsAreaRight = -1, pointsAreaBottom = -1;
+    sequenceTypeMap.clear();
+    errorSerialVector.clear();
 }
 
 /**
@@ -140,9 +155,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
         vector<Point2i> trapezoid4Points;
         vector<LightPoint> points = sortLampBeads(frameStepMap[STEP_VALID_FRAME_START], outMats,
                                                   trapezoid4Points);
-        pointsStepMap.clear();
-        frameStepMap.clear();
-        pPoints.clear();
+        release();
         //回调函数
         return splicedJson(lightPointsToJson(points), point2iToJson(trapezoid4Points));
     }
@@ -233,9 +246,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
             if (nextLPoint.lightIndex - curLPoint.lightIndex > 1) {
                 curLightIndex = curLPoint.lightIndex + 1;
                 LOGD(LOG_TAG,
-                     " 推断====  curLightIndex=%d redSameVector=%d greenSameVector=%d",
-                     curLightIndex, processor.redSameVector.size(),
-                     processor.greenSameVector.size());
+                     " 推断====  curLightIndex=%d ", curLightIndex);
                 //找出最接近的点位
                 LightPoint inferredPoint = findLamp(curLPoint.point2f, averageDistance / 0.45 * 2,
                                                     true,
@@ -310,7 +321,10 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
         auto erasePoint = pPoints.begin() + index;
         erasePoint->errorStatus = ERASE_POINT;
     }
-
+    sequenceTypeMap.clear();
+    for (int i = 0; i < 4; i++) {
+        sequenceTypeMap[i] = vector<LightPoint>();
+    }
     // 1. 统计分值相同的index
     // 2. 标记异常分点
     int normalIndex = 0;
@@ -333,7 +347,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
             score += scoreVV[step][pointsStepMap[step][i].type];
         }
         if (pPoints[i].errorStatus == ERASE_POINT) {
-            processor.errorSerialVector.push_back(pPoints[i]);
+            errorSerialVector.push_back(pPoints[i]);
             continue;
         }
         if (score < scoreMin) {
@@ -346,13 +360,20 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
             LOGW(LOG_TAG, "异常分值(>scoreMax=%d)，i=%d，index=%d", scoreMax, i, (score - scoreMin));
             continue;
         }
-//        pointsSrc.push_back(center);
         if (score == sameColorScore[0]) {
-            processor.redSameVector.push_back(pPoints[i]);
+            sequenceTypeMap[0].push_back(pPoints[i]);
             continue;
         }
         if (score == sameColorScore[1]) {
-            processor.greenSameVector.push_back(pPoints[i]);
+            sequenceTypeMap[1].push_back(pPoints[i]);
+            continue;
+        }
+        if (score == getScoreMax()) {
+            sequenceTypeMap[2].push_back(pPoints[i]);
+            continue;
+        }
+        if (score == getScoreMax() - 1) {
+            sequenceTypeMap[3].push_back(pPoints[i]);
             continue;
         }
         pPoints[i].score = score;
@@ -360,12 +381,12 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
         syncLightIndex(pPoints[i], score, lightType);
 
         if (pPoints[i].lightIndex < 0 || pPoints[i].lightIndex > getIcNum()) {
-            processor.errorSerialVector.push_back(pPoints[i]);
+            errorSerialVector.push_back(pPoints[i]);
         } else if ((lightType == TYPE_H70CX_3D || lightType == TYPE_H70CX_2D) &&
                    pPoints[i].lightIndex % 2 != 0) {
             LOGW(LOG_TAG, "error lightIndex: %d", pPoints[i].lightIndex);
             //70dx的序列是奇数点位，不满足的话就是推错点了
-            processor.errorSerialVector.push_back(pPoints[i]);
+            errorSerialVector.push_back(pPoints[i]);
         } else {
             if (processor.sameSerialNumMap[pPoints[i].lightIndex].empty()) {
                 processor.normalPoints.push_back(pPoints[i]);
@@ -375,9 +396,12 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
         }
     }
 
-    LOGW(LOG_TAG, "greenSameVector = %d   redSameVector = %d   errorSerialVector = %d",
-         processor.greenSameVector.size(),
-         processor.redSameVector.size(), processor.errorSerialVector.size());
+    LOGW(LOG_TAG,
+         "greenSameVector = %d   redSameVector = %d  max = %d   max2 = %d   errorSerialVector = %d",
+         sequenceTypeMap[1].size(),
+         sequenceTypeMap[0].size(),
+         sequenceTypeMap[2].size(),
+         sequenceTypeMap[3].size(), errorSerialVector.size());
     return 1;
 }
 
@@ -1091,25 +1115,19 @@ string point2iToJson(const vector<Point2i> &points) {
  */
 LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
                     LampBeadsProcessor &processor) {
-    bool isGreen = ((inferredLightIndex + 1) / 2) % 2 == 0;
-    if (lightType == TYPE_H682X) {
-        int greenRet = checkIsGreen(inferredLightIndex);
-        if (greenRet == -1) {
-            LOGE(LOG_TAG, "非推断序号");
-            return LightPoint(EMPTY_POINT);
-        }
-        isGreen = greenRet == 1;
-    }
-    vector<LightPoint> points;
-    LightPoint findLp;
-    if (isGreen) {
-        findLp = findLampInVector(center, minDistance, checkDistance, processor.greenSameVector);
-    } else {
-        findLp = findLampInVector(center, minDistance, checkDistance, processor.redSameVector);
+    if (inferredLightIndex > getIcNum()) return LightPoint(EMPTY_POINT);
+    int sequenceType = getNonSequenceType(inferredLightIndex, lightType);
+    if (sequenceType == -1) {
+        LOGE(LOG_TAG, "非推断序号");
+        return LightPoint(EMPTY_POINT);
     }
 
+    vector<LightPoint> points;
+    LightPoint findLp = findLampInVector(center, minDistance, checkDistance,
+                                         sequenceTypeMap[sequenceType], sequenceType);
+
     if (findLp.errorStatus == EMPTY_POINT) {
-        findLp = findLampInVector(center, minDistance, checkDistance, processor.errorSerialVector);
+        findLp = findLampInVector(center, minDistance, checkDistance, errorSerialVector,4);
     }
     if (findLp.errorStatus != EMPTY_POINT) {
         findLp.lightIndex = inferredLightIndex;
@@ -1122,9 +1140,9 @@ LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int
  * 从集合中查找点位
  */
 LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDistance,
-                            vector<LightPoint> &points) {
+                            vector<LightPoint> &points, int type) {
     if (checkDistance && minDistance > 150 && lightType != TYPE_H682X) {
-        LOGE(LOG_TAG, "找不到推断点,距离过大");
+        LOGE(LOG_TAG, "找不到推断点,距离过大----> %d", type);
         return LightPoint(EMPTY_POINT);
     }
     int selectIndex = -1;

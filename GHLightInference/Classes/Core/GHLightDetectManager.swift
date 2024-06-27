@@ -9,16 +9,12 @@ import Foundation
 
 public protocol GHPytorchProtocol {
     
-    func detection()
-    
     func detector() -> ObjectDetector
     
     func prepostProcessor() -> PrePostProcessor
 }
 
 public extension GHPytorchProtocol {
-    
-    func detection() { }
     
 }
 
@@ -38,17 +34,5 @@ extension GHLightDetectManager: GHPytorchProtocol {
     
     public func detector() -> ObjectDetector {
         return ObjectDetector()
-    }
-    
-    @objc public func detection() {
-        let resizedImage = UIImage()
-        guard var pixelBuffer = resizedImage.normalized() else {
-            return
-        }
-        DispatchQueue.global().async {
-            guard let outputs = self.detector().module.detect(image: &pixelBuffer) else {
-                return
-            }
-        }
     }
 }

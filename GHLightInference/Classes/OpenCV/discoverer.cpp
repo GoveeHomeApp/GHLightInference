@@ -262,6 +262,7 @@ polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &out
            TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 12, 0.1),
            3, KMEANS_PP_CENTERS, centers);
 
+    LOGD(LOG_TAG, "计算每个数据点到其对应聚类中心的距离");
 // 计算每个数据点到其对应聚类中心的距离
     vector<float> distances;
     map<int, vector<float>> distancesMap;
@@ -272,38 +273,38 @@ polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &out
         float distance = norm(point - center);
         distances.push_back(distance);
     }
-
+    LOGD(LOG_TAG, "计算离群点的阈值");
     // 计算离群点的阈值
     Scalar mean, stddev;
     meanStdDev(distances, mean, stddev);
     float threshold = mean[0] + stddevThreshold * stddev[0];
 //    LOGD(LOG_TAG, "mean: %f stddev: %f  threshold : %f", mean[0], stddev[0], threshold);
-    cv::Scalar colorScalar;
     int size = pointVector.size();
 
     // 输出离群点
     for (int i = pointsMat.rows - 1; i >= 0; i--) {
         if (distances[i] > threshold) {
-            colorScalar = Scalar(0, 0, 0);
-            circle(outMat, pointVector[i], 10, colorScalar, 2);
-            pointVector.erase(pointVector.begin() + i);
-            eraseVector.push_back(i);
+            circle(outMat, pointVector[i], 10, Scalar(0, 0, 0), 2);
+            if (pointVector.begin() + i < pointVector.end()) {
+                pointVector.erase(pointVector.begin() + i);
+                eraseVector.push_back(i);
+            }
         }
     }
 
     LOGD(LOG_TAG, "pointVector擦除离群点 = %d", size - pointVector.size());
     vector<vec4f> data;
     for (int i = 0; i < pointVector.size(); i++) {
-        if (labels.at<int>(i) == 0) {
+        if (i < labels.rows && labels.at<int>(i) == 0) {
             circle(outMat, pointVector[i], 7, Scalar(0, 0, 255, 160), 2);
-        } else if (labels.at<int>(i) == 1) {
+        } else if (i < labels.rows && labels.at<int>(i) == 1) {
             circle(outMat, pointVector[i], 7, Scalar(0, 255, 0, 160), 2);
         } else {
             circle(outMat, pointVector[i], 7, Scalar(255, 0, 0, 160), 2);
         }
         data.push_back(vec4f{pointVector[i].x * 1.f, pointVector[i].y * 1.f});
     }
-
+    LOGD(LOG_TAG, "绘制离群点");
     return eraseVector;
 }
 
@@ -451,7 +452,7 @@ double distanceP(Point p1, Point p2) {
 
 // 计算包含所有点的最小等腰梯形
 int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &trapezoid4Points) {
-    if (pointsSrc.empty()) {
+    if (pointsSrc.empty() || image.empty()) {
         LOGE(LOG_TAG, "getMinTrapezoid null");
         return 0;
     }

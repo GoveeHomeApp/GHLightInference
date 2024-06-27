@@ -126,24 +126,13 @@ public:
      * value：index集合
      */
     map<int, vector<int>> sameSerialNumMap;
-    /**
-     * 红色非序列灯珠集合
-     */
-    vector<LightPoint> redSameVector;
+
 
     /**
      * 坐标集合
      */
     vector<Point2i> pointXys;
 
-    /**
-     * 绿色非序列灯珠集合
-     */
-    vector<LightPoint> greenSameVector;
-    /**
-    * 得分错点集合
-    */
-    vector<LightPoint> errorSerialVector;
     /**
      * 正常序列点位
      */
@@ -256,6 +245,8 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor);
 /**处理剩余无序点位*/
 void decisionRemainingPoints(LampBeadsProcessor &processor);
 
+void release();
+
 /**
  * Point2i集合输出json
  */
@@ -279,7 +270,7 @@ LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int
  * 从集合中查找点位
  */
 LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDistance,
-                            vector<LightPoint> &points);
+                            vector<LightPoint> &points, int type);
 
 /**
  * 根据水平方向推断右边点

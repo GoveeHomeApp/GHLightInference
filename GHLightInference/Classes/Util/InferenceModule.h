@@ -11,6 +11,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface InferenceModule : NSObject
 
+@property (nonatomic, assign) int input_width;
+@property (nonatomic, assign) int input_height;
+@property (nonatomic, assign) int output_size;
+
+- (nullable instancetype)initWithFileAtPath:(NSString *)filePath withNc:(NSInteger)nc
+    NS_SWIFT_NAME(init(fileAtPath: nc:))NS_DESIGNATED_INITIALIZER;
 - (nullable instancetype)initWithFileAtPath:(NSString*)filePath
     NS_SWIFT_NAME(init(fileAtPath:))NS_DESIGNATED_INITIALIZER;
 + (instancetype)new NS_UNAVAILABLE;

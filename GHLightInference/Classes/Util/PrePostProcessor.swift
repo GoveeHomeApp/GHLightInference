@@ -17,7 +17,25 @@ public struct Prediction {
     public let h: Int
 }
 
+public struct ProcessorConfig {
+    public var inputWidth = 640
+    public var inpitHeight = 640
+    public var outputRow = 25200
+    public var outputColumn = 8 // 默认红绿蓝
+    public var threshold: CGFloat = 0.01 // 目前非极大值抑制都是0.01
+    public var nmsLimit = 1000
+}
+
+//public struct ProcessorScaleConfig {
+//    
+//    
+//    
+//}
+
 public class PrePostProcessor : NSObject {
+    
+    static var config: ProcessorConfig = ProcessorConfig()
+    
     // model input image size
     static public let inputWidth = 640
     static public let inputHeight = 640

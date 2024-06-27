@@ -15,6 +15,13 @@ struct PointIndex {
 };
 
 /**
+ *
+ * @param index  0 红色 1 绿色  2 sizeMax  3 sizeMax-1
+ * @return
+ */
+int getNonSequenceType(int inferredLightIndex, int lightType);
+
+/**
  * 初始化构建逻辑
  */
 int initVector(int icNum);
@@ -38,8 +45,6 @@ int getMaxStepCnt();
 int getScoreMin();
 
 int getIcNum();
-
-int checkIsGreen(int index);
 
 /**
  * 最大得分

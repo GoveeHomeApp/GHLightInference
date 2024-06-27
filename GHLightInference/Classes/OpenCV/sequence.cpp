@@ -226,9 +226,23 @@ vector<vector<int>> getColors(int frameStep) {
                 colorMap.push_back({index, numbers[colorIndex]});
                 cntOddIndex++;
             } else {
-                colorMap.push_back({index, numbers[cntEvenIndex]});
+                if (cntEvenIndex < 2) {
+                    colorMap.push_back({index, numbers[cntEvenIndex]});
+                } else {
+                    //2 3
+                    int offset = abs(cntEvenIndex - 2);
+                    int colorIndex = indexList[indexList.size() - 1 - offset];
+                    if (colorIndex > 2) {
+                        LOGE(LOG_TAG,
+                             "2-colorIndex > 2,  cntOddIndex=%d,  index=%d,  colorIndex=%d   frameStep=%d   offset=%d   indexList-size=%d ",
+                             cntOddIndex,
+                             index, colorIndex, frameStep, offset, indexList.size());
+                        continue;
+                    }
+                    colorMap.push_back({index, numbers[colorIndex]});
+                }
                 cntEvenIndex++;
-                if (cntEvenIndex == 2) {
+                if (cntEvenIndex == 4) {
                     cntEvenIndex = 0;
                 }
             }
@@ -237,8 +251,22 @@ vector<vector<int>> getColors(int frameStep) {
     return colorMap;
 }
 
-int checkIsGreen(int index) {
-    return greenMap[index];
+/**
+ *
+ * @param index  0 红色 1 绿色  2 sizeMax  3 sizeMax-1
+ * @return
+ */
+int getNonSequenceType(int inferredLightIndex, int lightType) {
+    if (lightType == TYPE_H682X) {
+        int greenRet = greenMap[inferredLightIndex];
+        if (greenRet == -1) {
+            LOGE(LOG_TAG, "非推断序号");
+            return -1;
+        }
+        return greenRet;
+    } else {
+        return ((inferredLightIndex + 3) / 2) % 4;
+    }
 }
 
 /**
