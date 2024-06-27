@@ -314,12 +314,17 @@ extension GHDetectionTool {
     
     func alignmentAll(finishHandler: () -> Void) {
         for (index, image) in self.preImageArray.enumerated() {
-            let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
-            #if DEBUG
-            self.imageView.image = resImage
-            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
-            #endif
-            self.afterImgArray.append(resImage)
+            do {
+                let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
+                #if DEBUG
+                self.imageView.image = resImage
+                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+                #endif
+                self.afterImgArray.append(resImage)
+            } catch {
+                self.transaction = nil
+                doneNotice?(nil)
+            }
         }
         
         if self.preImageArray.count == self.afterImgArray.count {
@@ -396,9 +401,14 @@ extension GHDetectionTool {
                     
                     var resultJsonString = ""
                     for (idx, _) in self.afterImgArray.enumerated() {
-                        let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType)
-                        if idx == self.afterImgArray.count-1 {
-                            resultJsonString = jsonStr
+                        do {
+                            let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType)
+                            if idx == self.afterImgArray.count-1 {
+                                resultJsonString = jsonStr
+                            }
+                        } catch {
+                            self.transaction = nil
+                            self.doneNotice?(nil)
                         }
                     }
                     print("log.f result json string \(resultJsonString)")

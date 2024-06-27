@@ -3,6 +3,9 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <opencv2/imgproc/types_c.h>
+#include <setjmp.h>
+
+jmp_buf jump_buffer;
 
 /**
  * 得分计算序列
@@ -49,6 +52,9 @@ Mat alignResize(int frameStep, Mat &originalMat) {
     if (frameStep > STEP_VALID_FRAME_START) {
         Mat originalMatClone = originalMat.clone();
         alignMat = alignImg(frameStepMap[STEP_VALID_FRAME_START], originalMatClone, false);
+        if (alignMat.empty()) {
+            return alignMat;
+        }
         resize(alignMat, srcResize, newSize);
         frameStepMap[frameStep] = alignMat.clone();
     } else {
@@ -60,6 +66,17 @@ Mat alignResize(int frameStep, Mat &originalMat) {
     return srcResize;
 }
 
+/**
+ * 处理信号异常值
+ * @param signal
+ */
+void signal_handler(int signal) {
+    LOGE(LOG_TAG, "====exception====signal_handler");
+    longjmp(jump_buffer, 1);
+}
+
+
+/**释放资源*/
 void release() {
     lightType = 0;
     pointsStepMap.clear();
@@ -84,65 +101,77 @@ void release() {
 String
 sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP,
                 vector<Mat> &outMats) {
+//    signal(SIGSEGV, signal_handler);
+//    if (setjmp(jump_buffer) == 1) {
+//        LOGE(LOG_TAG, "sortStripByStep 捕获异常状态---返回识别结果");
+//        return "{}";
+//    }
     lightType = lightTypeP;
-    if (frameStep == STEP_VALID_FRAME_START) {
-        Mat src = frameStepMap[frameStep].clone();
-        if (!pPointXys.empty())pPointXys.clear();
-        if (resultObjects.empty()) {
-            findByContours(src, pPointXys, getIcNum(), outMats);
-        } else {
-            for (int i = 0; i < resultObjects.size(); i++) {
-                LightPoint curPoint = resultObjects[i];
-                Rect_<int> rect = curPoint.tfRect;
-                Point center = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                curPoint.point2f = center;
-                curPoint.with = rect.width;
-                curPoint.height = rect.height;
-                pPointXys.push_back(center);
-            }
-        }
-        for (int i = 0; i < pPointXys.size(); i++) {
-            LightPoint curPoint;
-            if (!resultObjects.empty()) {
-                curPoint = resultObjects[i];
+    try {
+        if (frameStep == STEP_VALID_FRAME_START) {
+            Mat src = frameStepMap[frameStep].clone();
+            if (!pPointXys.empty())pPointXys.clear();
+            if (resultObjects.empty()) {
+                findByContours(src, pPointXys, getIcNum(), outMats);
             } else {
-                curPoint = LightPoint();
+                for (int i = 0; i < resultObjects.size(); i++) {
+                    LightPoint curPoint = resultObjects[i];
+                    Rect_<int> rect = curPoint.tfRect;
+                    Point center = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
+                    curPoint.point2f = center;
+                    curPoint.with = rect.width;
+                    curPoint.height = rect.height;
+                    pPointXys.push_back(center);
+                }
             }
-            Point center = pPointXys[i];
-            curPoint.point2f = pPointXys[i];
-            pPoints.push_back(curPoint);
-            if (i == 0 || pointsAreaTop > center.y) {
-                pointsAreaTop = center.y;
+            for (int i = 0; i < pPointXys.size(); i++) {
+                LightPoint curPoint;
+                if (!resultObjects.empty() && i < resultObjects.size()) {
+                    curPoint = resultObjects[i];
+                } else {
+                    curPoint = LightPoint();
+                }
+                Point center = pPointXys[i];
+                curPoint.point2f = pPointXys[i];
+                pPoints.push_back(curPoint);
+                if (i == 0 || pointsAreaTop > center.y) {
+                    pointsAreaTop = center.y;
+                }
+                if (i == 0 || pointsAreaBottom < center.y) {
+                    pointsAreaBottom = center.y;
+                }
+                if (i == 0 || pointsAreaLeft > center.x) {
+                    pointsAreaLeft = center.x;
+                }
+                if (i == 0 || pointsAreaRight < center.x) {
+                    pointsAreaRight = center.x;
+                }
             }
-            if (i == 0 || pointsAreaBottom < center.y) {
-                pointsAreaBottom = center.y;
-            }
-            if (i == 0 || pointsAreaLeft > center.x) {
-                pointsAreaLeft = center.x;
-            }
-            if (i == 0 || pointsAreaRight < center.x) {
-                pointsAreaRight = center.x;
-            }
+            LOGD(LOG_TAG,
+                 "pointsAreaTop=%d,pointsAreaBottom=%d,pointsAreaLeft=%d,pointsAreaRight=%d",
+                 pointsAreaTop, pointsAreaBottom, pointsAreaLeft, pointsAreaRight);
         }
-        LOGD(LOG_TAG, "pointsAreaTop=%d,pointsAreaBottom=%d,pointsAreaLeft=%d,pointsAreaRight=%d",
-             pointsAreaTop, pointsAreaBottom, pointsAreaLeft, pointsAreaRight);
-    }
-    if (frameStep == STEP_VALID_FRAME_START && !pPoints.empty()) {
-        Mat originalFrame1C = frameStepMap[STEP_VALID_FRAME_START].clone();
-        putText(originalFrame1C, "tensorFlow",
-                Point(40, 40),
-                FONT_HERSHEY_SIMPLEX, 0.5,
-                Scalar(0, 0, 0), 2);
-        for (int i = 0; i < pPoints.size(); i++) {
-            LightPoint curPoint = pPoints[i];
 
-            Rect roi;
-            pPoints[i].buildRect(originalFrame1C, roi);
-            rectangle(originalFrame1C, roi, Scalar(0, 255, 255), 4);
-            if (i == pPoints.size() - 1) {
-                outMats.push_back(originalFrame1C);
+        if (frameStep == STEP_VALID_FRAME_START && !pPoints.empty()) {
+            Mat originalFrame1C = frameStepMap[STEP_VALID_FRAME_START].clone();
+            putText(originalFrame1C, "tensorFlow",
+                    Point(40, 40),
+                    FONT_HERSHEY_SIMPLEX, 0.5,
+                    Scalar(0, 0, 0), 2);
+            for (int i = 0; i < pPoints.size(); i++) {
+                LightPoint curPoint = pPoints[pPoints.size()];
+
+                Rect roi;
+                pPoints[i].buildRect(originalFrame1C, roi);
+                rectangle(originalFrame1C, roi, Scalar(0, 255, 255), 4);
+                if (i == pPoints.size() - 1) {
+                    outMats.push_back(originalFrame1C);
+                }
             }
         }
+    } catch (...) {
+        LOGE(LOG_TAG, "========》 异常1");
+        return "{}";
     }
 
     //定位特征点
@@ -174,6 +203,12 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
 
     LampBeadsProcessor processor = LampBeadsProcessor(scoreMin, scoreMax, maxFrameStep);
     if (pPoints.empty())return processor.totalPoints;
+
+//    signal(SIGSEGV, signal_handler);
+//    if (setjmp(jump_buffer) == 1) {
+//        LOGE(LOG_TAG, "sortLampBeads 捕获异常状态---返回识别结果");
+//        return processor.totalPoints;
+//    }
 
     LOGW(LOG_TAG, "sortLampBeads pPoints=%d   scoreMin=%d , scoreMax = %d ,endStep = %d",
          pPoints.size(), scoreMin, scoreMax, maxFrameStep);
@@ -900,53 +935,57 @@ Mat alignImg(Mat &src, Mat &trans, bool back4Matrix) {
         LOGE(LOG_TAG, "===========trans empty===========");
         return src;
     }
-    Mat warp_matrix;
-    if (motionTypeSet == MOTION_AFFINE) {
-        warp_matrix = Mat::eye(2, 3, CV_32F);
-    } else if (motionTypeSet == MOTION_HOMOGRAPHY) {//MOTION_HOMOGRAPHY 耗时更久
-        warp_matrix = Mat::eye(3, 3, CV_32F);
-    } else {
-        //MOTION_EUCLIDEAN
-    }
-    // 降低图像分辨率
-    // 创建掩膜，指定搜索区域
-    Mat mask = Mat::zeros(trans.size(), CV_8UC1);
-    Rect searchRegion;
-    searchRegion = Rect(pointsAreaLeft, pointsAreaTop, pointsAreaRight - pointsAreaLeft,
-                        pointsAreaBottom - pointsAreaTop);
-    int area = searchRegion.width * searchRegion.height;
-    if (area < 25) {
-        // 假设我们只想在目标图像的一个特定区域内搜索
-        LOGE(LOG_TAG, "area < 25,use hard rect");
-        searchRegion = Rect(120, 80, 400, 480); // x, y, width, height
-    }
-
-    rectangle(mask, searchRegion, Scalar::all(255), FILLED);
-
-    // Convert images to grayscale
     Mat alignedImg;
-    Mat im1Src, im2Trans;
-    // 转换为灰度图
-    cvtColor(src, im1Src, CV_BGR2GRAY);
+    try {
+        Mat warp_matrix;
+        if (motionTypeSet == MOTION_AFFINE) {
+            warp_matrix = Mat::eye(2, 3, CV_32F);
+        } else if (motionTypeSet == MOTION_HOMOGRAPHY) {//MOTION_HOMOGRAPHY 耗时更久
+            warp_matrix = Mat::eye(3, 3, CV_32F);
+        } else {
+            //MOTION_EUCLIDEAN
+        }
+        // 降低图像分辨率
+        // 创建掩膜，指定搜索区域
+        Mat mask = Mat::zeros(trans.size(), CV_8UC1);
+        Rect searchRegion;
+        searchRegion = Rect(pointsAreaLeft, pointsAreaTop, pointsAreaRight - pointsAreaLeft,
+                            pointsAreaBottom - pointsAreaTop);
+        int area = searchRegion.width * searchRegion.height;
+        if (area < 25) {
+            // 假设我们只想在目标图像的一个特定区域内搜索
+            LOGE(LOG_TAG, "area < 25,use hard rect");
+            searchRegion = Rect(120, 80, 400, 480); // x, y, width, height
+        }
 
-    cvtColor(trans, im2Trans, CV_BGR2GRAY);
+        rectangle(mask, searchRegion, Scalar::all(255), FILLED);
 
-    TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS, number_of_iterations2,
-                          termination_eps2);
-    findTransformECC(im1Src, im2Trans, warp_matrix, motionTypeSet, criteria);//, mask
-    if (motionTypeSet == MOTION_HOMOGRAPHY) {
-        warpPerspective(trans, alignedImg, warp_matrix, trans.size(),
-                        INTER_LINEAR + WARP_INVERSE_MAP);
-    } else {
-        warpAffine(trans, alignedImg, warp_matrix, trans
-                .size(), INTER_LINEAR + WARP_INVERSE_MAP);
-    }
-    if (back4Matrix) {
-        return warp_matrix;
-    }
+        Mat im1Src, im2Trans;
+        // 转换为灰度图
+        cvtColor(src, im1Src, CV_BGR2GRAY);
+
+        cvtColor(trans, im2Trans, CV_BGR2GRAY);
+
+        TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS, number_of_iterations2,
+                              termination_eps2);
+        findTransformECC(im1Src, im2Trans, warp_matrix, motionTypeSet, criteria);//, mask
+        if (motionTypeSet == MOTION_HOMOGRAPHY) {
+            warpPerspective(trans, alignedImg, warp_matrix, trans.size(),
+                            INTER_LINEAR + WARP_INVERSE_MAP);
+        } else {
+            warpAffine(trans, alignedImg, warp_matrix, trans
+                    .size(), INTER_LINEAR + WARP_INVERSE_MAP);
+        }
+        if (back4Matrix) {
+            return warp_matrix;
+        }
 //    // 在图像上绘制矩形
 //    rectangle(alignedImg, searchRegion, Scalar(255, 255, 0), 2);
-    return alignedImg;
+        return alignedImg;
+    } catch (...) {
+        LOGE(LOG_TAG, "========》 异常4");
+        return alignedImg;
+    }
 }
 
 /**
@@ -966,6 +1005,7 @@ bool compareIndex(const LightPoint &p1, const LightPoint &p2) {
 vector<LightPoint>
 findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &outMats) {
     vector<LightPoint> result;
+    if (src.empty())return result;
     Mat meanColorMat = src.clone();
     for (int i = 0; i < points.size(); i++) {
         LightPoint lPoint = points[i];
@@ -986,47 +1026,51 @@ LightPoint meanColor(Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColor
         return LightPoint();
 
     }
-    Point2f point = lPoint.point2f;
-    Rect roi;
-    Mat region = lPoint.buildRect(src, roi);
+    try {
+        Point2f point = lPoint.point2f;
+        Rect roi;
+        Mat region = lPoint.buildRect(src, roi);
 
-    if (region.empty()) {
-        LOGE(LOG_TAG, "region is empty!");
+        if (region.empty()) {
+            LOGE(LOG_TAG, "region is empty!");
+            return lPoint.copyPoint(E_W, Scalar());
+        }
+
+        Scalar avgPixelIntensity = mean(region);
+
+        double green = avgPixelIntensity[1];
+        double red = avgPixelIntensity[2];
+
+        Mat hsv;
+        cvtColor(region, hsv, COLOR_BGR2HSV);
+        Scalar mean = cv::mean(hsv);
+
+        CUS_COLOR_TYPE colorType = E_W;
+        Scalar color = Scalar(0, 255, 255);
+        rectangle(meanColorMat, roi, color, 2);
+        if (red > green) {//red > blue &&
+            colorType = E_RED;
+            putText(meanColorMat,
+                    "red", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                    color, 1);
+
+        } else if (green > red) {// && green > blue
+            colorType = E_GREEN;
+            putText(meanColorMat,
+                    "green", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                    color, 1);
+        } else {
+            LOGV(LOG_TAG, "meanColor= 无法识别");
+            putText(meanColorMat,
+                    "UnKnow", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                    color, 1);
+        }
+
+        return lPoint.copyPoint(colorType, mean);
+    } catch (...) {
+        LOGE(LOG_TAG, "========》 异常2");
         return lPoint.copyPoint(E_W, Scalar());
     }
-
-    Scalar avgPixelIntensity = mean(region);
-
-    double green = avgPixelIntensity[1];
-    double red = avgPixelIntensity[2];
-
-    Mat hsv;
-    cvtColor(region, hsv, COLOR_BGR2HSV);
-    Scalar mean = cv::mean(hsv);
-
-    CUS_COLOR_TYPE colorType = E_W;
-    Scalar color = Scalar(0, 255, 255);
-    rectangle(meanColorMat, roi, color,
-              2);
-    if (red > green) {//red > blue &&
-        colorType = E_RED;
-        putText(meanColorMat,
-                "red", point, FONT_HERSHEY_SIMPLEX, 0.5,
-                color, 1);
-
-    } else if (green > red) {// && green > blue
-        colorType = E_GREEN;
-        putText(meanColorMat,
-                "green", point, FONT_HERSHEY_SIMPLEX, 0.5,
-                color, 1);
-    } else {
-        LOGV(LOG_TAG, "meanColor= 无法识别");
-        putText(meanColorMat,
-                "UnKnow", point, FONT_HERSHEY_SIMPLEX, 0.5,
-                color, 1);
-    }
-
-    return lPoint.copyPoint(colorType, mean);
 }
 
 bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C) {
@@ -1113,8 +1157,9 @@ string point2iToJson(const vector<Point2i> &points) {
 /**
  * 从非序列疑似灯珠集合中查找点位
  */
-LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
-                    LampBeadsProcessor &processor) {
+LightPoint
+findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
+         LampBeadsProcessor &processor) {
     if (inferredLightIndex > getIcNum()) return LightPoint(EMPTY_POINT);
     int sequenceType = getNonSequenceType(inferredLightIndex, lightType);
     if (sequenceType == -1) {
@@ -1127,7 +1172,7 @@ LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int
                                          sequenceTypeMap[sequenceType], sequenceType);
 
     if (findLp.errorStatus == EMPTY_POINT) {
-        findLp = findLampInVector(center, minDistance, checkDistance, errorSerialVector,4);
+        findLp = findLampInVector(center, minDistance, checkDistance, errorSerialVector, 4);
     }
     if (findLp.errorStatus != EMPTY_POINT) {
         findLp.lightIndex = inferredLightIndex;
@@ -1145,24 +1190,29 @@ LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDista
         LOGE(LOG_TAG, "找不到推断点,距离过大----> %d", type);
         return LightPoint(EMPTY_POINT);
     }
-    int selectIndex = -1;
-    double distanceTemp = minDistance * 0.45;
-    for (int i = 0; i < points.size(); i++) {
-        LightPoint itA = points[i];
-        int contrastX = itA.point2f.x;
-        int contrastY = itA.point2f.y;
-        double distance = sqrt((contrastX - center.x) * (contrastX - center.x) +
-                               (contrastY - center.y) * (contrastY - center.y));
-        if (distance < distanceTemp) {
-            distanceTemp = distance;
-            selectIndex = i;
+    try {
+        int selectIndex = -1;
+        double distanceTemp = minDistance * 0.45;
+        for (int i = 0; i < points.size(); i++) {
+            LightPoint itA = points[i];
+            int contrastX = itA.point2f.x;
+            int contrastY = itA.point2f.y;
+            double distance = sqrt((contrastX - center.x) * (contrastX - center.x) +
+                                   (contrastY - center.y) * (contrastY - center.y));
+            if (distance < distanceTemp) {
+                distanceTemp = distance;
+                selectIndex = i;
+            }
         }
-    }
-    if (selectIndex == -1) {
+        if (selectIndex == -1) {
+            return LightPoint(EMPTY_POINT);
+        }
+        LightPoint selectPoint = points[selectIndex];
+        points.erase(points.begin() + selectIndex);
+//    LOGV(LOG_TAG, "points剩余  = %d", points.size());
+        return selectPoint;
+    } catch (...) {
+        LOGE(LOG_TAG, "========》 异常3");
         return LightPoint(EMPTY_POINT);
     }
-    LightPoint selectPoint = points[selectIndex];
-    points.erase(points.begin() + selectIndex);
-//    LOGV(LOG_TAG, "points剩余  = %d", points.size());
-    return selectPoint;
 }

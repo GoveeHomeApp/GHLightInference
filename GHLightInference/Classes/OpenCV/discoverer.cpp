@@ -246,63 +246,65 @@ Mat removeLineContours(const Mat &binary) {
 vector<int>
 polyPoints(vector<Point2i> &pointVector, int k, double stddevThreshold, Mat &outMat) {
     vector<int> eraseVector;
-// Convert points to a matrix for KMeans clustering
     if (pointVector.empty()) {
         LOGE(LOG_TAG, "polyPoints null");
         return eraseVector;
     }
     if (pointVector.size() < k + 4)
         return eraseVector;
-    Mat pointsMat(pointVector);
-    pointsMat.convertTo(pointsMat, CV_32F);
+    try {
+        Mat pointsMat(pointVector);
+        pointsMat.convertTo(pointsMat, CV_32F);
 
-    LOGD(LOG_TAG, "pointVector: %d", pointVector.size());
-    Mat labels, centers;
-    kmeans(pointsMat, k, labels,
-           TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 12, 0.1),
-           3, KMEANS_PP_CENTERS, centers);
+        LOGD(LOG_TAG, "pointVector: %d", pointVector.size());
+        Mat labels, centers;
+        kmeans(pointsMat, k, labels,
+               TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 12, 0.1),
+               3, KMEANS_PP_CENTERS, centers);
 
-    LOGD(LOG_TAG, "计算每个数据点到其对应聚类中心的距离");
+        LOGD(LOG_TAG, "计算每个数据点到其对应聚类中心的距离");
 // 计算每个数据点到其对应聚类中心的距离
-    vector<float> distances;
-    map<int, vector<float>> distancesMap;
-    for (int i = 0; i < pointsMat.rows; i++) {
-        Point2f point = pointsMat.at<Point2f>(i);
-        int type = labels.at<int>(i);
-        Point2f center = centers.at<Point2f>(type);
-        float distance = norm(point - center);
-        distances.push_back(distance);
-    }
-    LOGD(LOG_TAG, "计算离群点的阈值");
-    // 计算离群点的阈值
-    Scalar mean, stddev;
-    meanStdDev(distances, mean, stddev);
-    float threshold = mean[0] + stddevThreshold * stddev[0];
-//    LOGD(LOG_TAG, "mean: %f stddev: %f  threshold : %f", mean[0], stddev[0], threshold);
-    int size = pointVector.size();
+        vector<float> distances;
+        map<int, vector<float>> distancesMap;
+        for (int i = 0; i < pointsMat.rows; i++) {
+            Point2f point = pointsMat.at<Point2f>(i);
+            int type = labels.at<int>(i);
+            Point2f center = centers.at<Point2f>(type);
+            float distance = norm(point - center);
+            distances.push_back(distance);
+        }
+        LOGD(LOG_TAG, "计算离群点的阈值");
+        // 计算离群点的阈值
+        Scalar mean, stddev;
+        meanStdDev(distances, mean, stddev);
+        float threshold = mean[0] + stddevThreshold * stddev[0];
+        int size = pointVector.size();
 
-    // 输出离群点
-    for (int i = pointsMat.rows - 1; i >= 0; i--) {
-        if (distances[i] > threshold) {
-            circle(outMat, pointVector[i], 10, Scalar(0, 0, 0), 2);
-            if (pointVector.begin() + i < pointVector.end()) {
-                pointVector.erase(pointVector.begin() + i);
-                eraseVector.push_back(i);
+        // 输出离群点
+        for (int i = pointsMat.rows - 1; i >= 0; i--) {
+            if (distances[i] > threshold) {
+                circle(outMat, pointVector[i], 10, Scalar(0, 0, 0), 2);
+                if (pointVector.begin() + i < pointVector.end()) {
+                    pointVector.erase(pointVector.begin() + i);
+                    eraseVector.push_back(i);
+                }
             }
         }
-    }
 
-    LOGD(LOG_TAG, "pointVector擦除离群点 = %d", size - pointVector.size());
-    vector<vec4f> data;
-    for (int i = 0; i < pointVector.size(); i++) {
-        if (i < labels.rows && labels.at<int>(i) == 0) {
-            circle(outMat, pointVector[i], 7, Scalar(0, 0, 255, 160), 2);
-        } else if (i < labels.rows && labels.at<int>(i) == 1) {
-            circle(outMat, pointVector[i], 7, Scalar(0, 255, 0, 160), 2);
-        } else {
-            circle(outMat, pointVector[i], 7, Scalar(255, 0, 0, 160), 2);
+        LOGD(LOG_TAG, "pointVector擦除离群点 = %d", size - pointVector.size());
+        vector<vec4f> data;
+        for (int i = 0; i < pointVector.size(); i++) {
+            if (i < labels.rows && labels.at<int>(i) == 0) {
+                circle(outMat, pointVector[i], 7, Scalar(0, 0, 255, 160), 2);
+            } else if (i < labels.rows && labels.at<int>(i) == 1) {
+                circle(outMat, pointVector[i], 7, Scalar(0, 255, 0, 160), 2);
+            } else {
+                circle(outMat, pointVector[i], 7, Scalar(255, 0, 0, 160), 2);
+            }
+            data.push_back(vec4f{pointVector[i].x * 1.f, pointVector[i].y * 1.f});
         }
-        data.push_back(vec4f{pointVector[i].x * 1.f, pointVector[i].y * 1.f});
+    } catch (...) {
+        LOGE(LOG_TAG, "========》 异常5");
     }
     LOGD(LOG_TAG, "绘制离群点");
     return eraseVector;
@@ -384,28 +386,31 @@ double calculateDistance(Point p1, Point p2) {
 }
 
 void mergePoints(vector<Point> &points, double threshold) {
-    vector<Point> mergedPoints;
-    vector<bool> merged(points.size(), false);
+    try {
+        vector<Point> mergedPoints;
+        vector<bool> merged(points.size(), false);
 
-    for (int i = 0; i < points.size(); i++) {
-        if (merged[i]) continue;
+        for (int i = 0; i < points.size(); i++) {
+            if (merged[i]) continue;
 
-        Point mergedPoint = points[i];
-        int count = 1;
+            Point mergedPoint = points[i];
+            int count = 1;
 
-        for (int j = i + 1; j < points.size(); j++) {
-            if (!merged[j] && calculateDistance(points[i], points[j]) < threshold) {
-                mergedPoint += points[j];
-                count++;
-                merged[j] = true;
+            for (int j = i + 1; j < points.size(); j++) {
+                if (!merged[j] && calculateDistance(points[i], points[j]) < threshold) {
+                    mergedPoint += points[j];
+                    count++;
+                    merged[j] = true;
+                }
             }
+
+            mergedPoint /= count;
+            mergedPoints.push_back(mergedPoint);
+            points = mergedPoints;
         }
-
-        mergedPoint /= count;
-        mergedPoints.push_back(mergedPoint);
+    } catch (...) {
+        LOGE(LOG_TAG, "========》 异常6");
     }
-
-    points = mergedPoints;
 }
 
 bool compareContourAreas(vector<Point> contour1, vector<Point> contour2) {
