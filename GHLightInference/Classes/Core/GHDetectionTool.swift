@@ -118,6 +118,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     }
     
     func startCaptureFrame(step: Int) {
+        print("log.f ==== 取第\(step)帧效果")
         let colorTwoDimArray = GHOpenCVBridge.shareManager().getColorsByStep(step)
         var greenArray: [Int] = []
         if colorTwoDimArray.count > 0 {
@@ -161,6 +162,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             } else {
                 // 新的流程 可以执行
                 self.transaction = sessionId
+                self.preImageArray.removeAll()
+                self.afterImgArray.removeAll()
                 // 返回第一帧灯效
                 self.startCaptureFrame(step: 0)
             }
@@ -173,6 +176,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         // 取帧handler
         self.frameHandler = { [weak self] step in
             guard let `self` = self else { return }
+            print("log.f ==== 收到第\(step)帧效果发送成功 取帧")
             if let _ = self.transaction { //正常transaction
                 var second = 0.5
                 if step == 0 {
@@ -294,6 +298,10 @@ extension GHDetectionTool {
         
         for (index, image) in self.preImageArray.enumerated() {
             let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
+            #if DEBUG
+            self.imageView.image = resImage
+            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+            #endif
             self.afterImgArray.append(resImage)
         }
         
@@ -325,7 +333,7 @@ extension GHDetectionTool {
     func runDetection() {
         // 只对第二张图进行识别
         if self.afterImgArray.count > 1 {
-            let image = self.afterImgArray[1]
+            let image = self.afterImgArray[0]
             let imageView = self.imageView
             self.imageView.image = image
             let imgScaleX = Double(image.size.width / CGFloat(PrePostProcessor.inputWidth));
@@ -360,6 +368,8 @@ extension GHDetectionTool {
                         po.lightId = ct
                         poArr.append(po)
                     }
+                    
+                    GHOpenCVBridge.shareManager().clearAllresLp()
                     GHOpenCVBridge.shareManager().createLightPointArray(poArr)
                     
                     var resultJsonString = ""
@@ -370,8 +380,6 @@ extension GHDetectionTool {
                         }
                     }
                     print("log.f result json string \(resultJsonString)")
-                    
-                    
                     
                     if let data = resultJsonString.data(using: .utf8) {
                         let dt = try?JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]

@@ -38,6 +38,8 @@ NS_ASSUME_NONNULL_BEGIN
 // 获取last outlet
 - (UIImage *)showLastOutlet;
 
+- (void)clearAllresLp;
+
 @end
 
 NS_ASSUME_NONNULL_END

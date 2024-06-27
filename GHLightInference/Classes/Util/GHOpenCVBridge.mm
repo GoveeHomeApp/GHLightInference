@@ -100,6 +100,7 @@ vector<LightPoint> resLp;
 }
 
 - (UIImage *)alignmentWithImage:(UIImage *)image step:(NSInteger)stepCount rotation:(BOOL)isRotate {
+    
     self.alignStep = stepCount;
     int ste = (int)stepCount;
     Mat aliMat = [self cvMatFromUIImage:image];
@@ -134,7 +135,7 @@ vector<LightPoint> resLp;
                 ltp.type = E_W;
             }
             ltp.tfScore = obj.score;
-            Rect_<int> rect(obj.x, obj.y, obj.width, obj.height);
+            Rect_<int> rect((int)obj.x, (int)obj.y, (int)obj.width, (int)obj.height);
             ltp.tfRect = rect;
             resLp.push_back(ltp);
         }
@@ -146,6 +147,10 @@ vector<LightPoint> resLp;
     jsonStr = sortStripByStep((int)stepCount, resLp, type, outMats);
     NSString * res = [NSString stringWithUTF8String:jsonStr.c_str()];
     return res;
+}
+
+- (void)clearAllresLp {
+    resLp.clear();
 }
 
 - (UIImage *)showLastOutlet {
