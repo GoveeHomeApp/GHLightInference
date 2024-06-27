@@ -64,6 +64,10 @@ vector<LightPoint> resLp;
     self.alignStep = 0;
 }
 
+- (int)getMaxStep {
+    return getMaxStepCnt();
+}
+
 - (void)createAllStepByIc:(NSInteger)icCount {
     initVector((int)icCount);
 }

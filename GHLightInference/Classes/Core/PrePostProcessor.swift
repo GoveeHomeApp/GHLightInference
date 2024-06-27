@@ -19,32 +19,45 @@ public struct Prediction {
 
 public struct ProcessorConfig {
     public var inputWidth = 640
-    public var inpitHeight = 640
+    public var inputHeight = 640
     public var outputRow = 25200
     public var outputColumn = 8 // 默认红绿蓝
-    public var threshold: CGFloat = 0.01 // 目前非极大值抑制都是0.01
+    public var threshold: Float = 0.01 // 目前非极大值抑制都是0.01
     public var nmsLimit = 1000
 }
 
-//public struct ProcessorScaleConfig {
-//    
-//    
-//    
-//}
+public struct ProcessorScaleConfig {
+    public var scaleRate: CGFloat = 0.0
+}
 
 public class PrePostProcessor : NSObject {
     
-    static var config: ProcessorConfig = ProcessorConfig()
+    public init(config: ProcessorConfig) {
+        self.config = config
+    }
+    
+    public var config: ProcessorConfig = ProcessorConfig()
     
     // model input image size
-    static public let inputWidth = 640
-    static public let inputHeight = 640
-
+    public var inputWidth: Int {
+        config.inputWidth
+    }
+    public var inputHeight: Int {
+        config.inputHeight
+    }
     // model output is of size 25200*(num_of_class+5)
-    static public let outputRow = 25200 // as decided by the YOLOv5 model for input image of size 640*640
-    static public let outputColumn = 8 // left, top, right, bottom, score and 80 class probability
-    static public let threshold : Float = 0.01 // score above which a detection is generated 非极大值抑制
-    static public let nmsLimit = 1000 // max number of detections
+    public var outputRow: Int {
+        config.outputRow
+    } // as decided by the YOLOv5 model for input image of size 640*640
+    public var outputColumn: Int {
+        config.outputColumn
+    } // left, top, right, bottom, score and 80 class probability
+    public var threshold : Float {
+        config.threshold
+    } // score above which a detection is generated 非极大值抑制
+    public var nmsLimit: Int {
+        config.nmsLimit
+    }// max number of detections
     
     // The two methods nonMaxSuppression and IOU below are from  https://github.com/hollance/YOLO-CoreML-MPSNNGraph/blob/master/Common/Helpers.swift
     /**
@@ -55,7 +68,7 @@ public class PrePostProcessor : NSObject {
         - limit: the maximum number of boxes that will be selected
         - threshold: used to decide whether boxes overlap too much
     */
-    static public func nonMaxSuppression(boxes: [Prediction], limit: Int, threshold: Float) -> [Prediction] {
+    public func nonMaxSuppression(boxes: [Prediction], limit: Int, threshold: Float) -> [Prediction] {
 
       // Do an argsort on the confidence scores, from high to low.
       let sortedIndices = boxes.indices.sorted { boxes[$0].score > boxes[$1].score }
@@ -93,7 +106,7 @@ public class PrePostProcessor : NSObject {
     /**
       Computes intersection-over-union overlap between two bounding boxes.
     */
-    static public func IOU(a: CGRect, b: CGRect) -> Float {
+    public func IOU(a: CGRect, b: CGRect) -> Float {
         let areaA = a.width * a.height
         if areaA <= 0 { return 0 }
 
@@ -109,7 +122,7 @@ public class PrePostProcessor : NSObject {
         return Float(intersectionArea / (areaA + areaB - intersectionArea))
     }
 
-    static public func outputsToNMSPredictions(outputs: [NSNumber], imgScaleX: Double, imgScaleY: Double, ivScaleX: Double, ivScaleY: Double, startX: Double, startY: Double) -> [Prediction] {
+    public func outputsToNMSPredictions(outputs: [NSNumber], imgScaleX: Double, imgScaleY: Double, ivScaleX: Double, ivScaleY: Double, startX: Double, startY: Double) -> [Prediction] {
         var predictions = [Prediction]()
         for i in 0..<outputRow {
             if Float(truncating: outputs[i*outputColumn+4]) > threshold {
@@ -146,7 +159,7 @@ public class PrePostProcessor : NSObject {
         return nonMaxSuppression(boxes: predictions, limit: nmsLimit, threshold: threshold)
     }
 
-    static public func cleanDetection(imageView: UIImageView) {
+    public func cleanDetection(imageView: UIImageView) {
         if let layers = imageView.layer.sublayers {
             for layer in layers {
                 if layer is CATextLayer {
@@ -159,7 +172,7 @@ public class PrePostProcessor : NSObject {
         }
     }
 
-    static public func showDetection(imageView: UIImageView, nmsPredictions: [Prediction], classes: [String]) {
+    public func showDetection(imageView: UIImageView, nmsPredictions: [Prediction], classes: [String]) {
         
         debugPrint("Total object \(nmsPredictions.count)")
         
@@ -183,13 +196,6 @@ public class PrePostProcessor : NSObject {
                     imageView.addSubview(bbox)
                 }
             case "blue":
-//                let bbox = UIView(frame: pred.rect)
-//                bbox.backgroundColor = UIColor.clear
-//                bbox.layer.borderColor = UIColor.blue.cgColor
-//                bbox.layer.borderWidth = 1
-//                if pred.score > 0.1 {
-//                    imageView.addSubview(bbox)
-//                }
                 break
             default:
                 break

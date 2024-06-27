@@ -52,6 +52,8 @@ public class SessionGenerator {
     
     public private(set) static var instance = SessionGenerator()
     
+    public var sku: String = ""
+    
     public func newSessionId() -> String {
         UUID().uuidString
     }

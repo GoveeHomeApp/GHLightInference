@@ -8,6 +8,10 @@ import UIKit
 
 public class ObjectDetector {
     
+    public private(set) static var instance = ObjectDetector()
+    
+    public var sku: String = ""
+    
     public lazy var module: InferenceModule = {
         if let path = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first, let module = InferenceModule(fileAtPath: path+"/Detection/best.torchscript.ptl") {
             return module
@@ -23,8 +27,12 @@ public class ObjectDetector {
     }()
     
     public lazy var classes: [String] = {
-        return ["green",
-                "red",
-                "blue"]
+        if sku.hasPrefix("H682") {
+            return ["light"]
+        } else {
+            return ["green",
+                    "red",
+                    "blue"]
+        }
     }()
 }

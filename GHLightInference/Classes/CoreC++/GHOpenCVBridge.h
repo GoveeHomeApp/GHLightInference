@@ -17,6 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
 // 重设step
 - (void)restAlignStep;
 
+- (int)getMaxStep;
+
 // 初始化灯序颜色
 - (void)createAllStepByIc:(NSInteger)icCount;
 

@@ -44,6 +44,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
     public var sku: String = ""
     public var ic: Int = 0
+    var bizType: Int = 0
     
     var captureSession: AVCaptureSession!
     var videoOutput: AVCaptureVideoDataOutput!
@@ -54,8 +55,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     var preImageArray: [UIImage] = []
     var afterImgArray: [UIImage] = []
     
-    private var inferencer = GHLightDetectManager.instance.detector()
-    private var prepostProcessor = GHLightDetectManager.instance.prepostProcessor()
+    private var inferencer = ObjectDetector.instance
+    private var prepostProcessor: PrePostProcessor?
     
     public var imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 640, height: 640))
     
@@ -72,7 +73,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.frameNotice = frameNotice
         self.doneNotice = doneNotice
         super.init()
-        
+        self.prepareConfig(sku: sku)
         self.setupBindings()
         self.startingIFrame()
         
@@ -193,7 +194,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             guard let `self` = self else { return }
             // 对齐一帧
             if self.preImageArray.count > 0 {
-                if self.preImageArray.count == SessionGenerator.instance.maxStepCountByIc(icCount: self.ic)-1 {
+                if self.preImageArray.count == GHOpenCVBridge.shareManager().getMaxStep() {
                     self.finishFrameNotice?(true)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         self.alignmentAll { [weak self] in
@@ -265,21 +266,38 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
 }
 
+// MARK: configuration
+extension GHDetectionTool {
+    func prepareConfig(sku: String) {
+        var cf = ProcessorConfig()
+        if sku.hasPrefix("H682") {
+            cf = ProcessorConfig(outputColumn: 6)
+            switch sku {
+            case "H6820":
+                ic = 10
+            case "H6821":
+                ic = 20
+            default: break
+            }
+            self.bizType = 1
+        }
+        prepostProcessor = PrePostProcessor(config: cf)
+        ObjectDetector.instance.sku = sku
+    }
+}
+
+// MARK: local detection
 extension GHDetectionTool {
     
     func saveImageViewWithSubviewsToPhotoAlbum(imageView: UIImageView) {
         // 开始图形上下文
         UIGraphicsBeginImageContextWithOptions(imageView.bounds.size, false, 0.0)
-        
         // 将imageView的layer渲染到图形上下文中
         imageView.layer.render(in: UIGraphicsGetCurrentContext()!)
-        
         // 获取合成的图片
         let image = UIGraphicsGetImageFromCurrentImageContext()
-        
         // 结束图形上下文
         UIGraphicsEndImageContext()
-        
         // 保存图片到相册
         PHPhotoLibrary.shared().performChanges({
             PHAssetChangeRequest.creationRequestForAsset(from: image!)
@@ -295,7 +313,6 @@ extension GHDetectionTool {
     }
     
     func alignmentAll(finishHandler: () -> Void) {
-        
         for (index, image) in self.preImageArray.enumerated() {
             let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
             #if DEBUG
@@ -332,12 +349,12 @@ extension GHDetectionTool {
     
     func runDetection() {
         // 只对第二张图进行识别
-        if self.afterImgArray.count > 1 {
+        if let prepostProcessor = self.prepostProcessor {
             let image = self.afterImgArray[0]
             let imageView = self.imageView
             self.imageView.image = image
-            let imgScaleX = Double(image.size.width / CGFloat(PrePostProcessor.inputWidth));
-            let imgScaleY = Double(image.size.height / CGFloat(PrePostProcessor.inputHeight));
+            let imgScaleX = Double(image.size.width / CGFloat(prepostProcessor.inputWidth));
+            let imgScaleY = Double(image.size.height / CGFloat(prepostProcessor.inputHeight));
             let ivScaleX : Double = (image.size.width > image.size.height ? Double(imageView.frame.size.width / image.size.width) : Double(imageView.frame.size.height / image.size.height))
             let ivScaleY : Double = (image.size.height > image.size.width ? Double(imageView.frame.size.height / image.size.height) : Double(imageView.frame.size.width / image.size.width))
             let startX = Double((imageView.frame.size.width - CGFloat(ivScaleX) * image.size.width)/2)
@@ -350,9 +367,9 @@ extension GHDetectionTool {
                 guard let outputs = self.inferencer.module.detect(image: &pixelBuffer) else {
                     return
                 }
-                let nmsPredictions = PrePostProcessor.outputsToNMSPredictions(outputs: outputs, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
+                let nmsPredictions = prepostProcessor.outputsToNMSPredictions(outputs: outputs, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
                 DispatchQueue.main.async {
-                    PrePostProcessor.showDetection(imageView: self.imageView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
+                    prepostProcessor.showDetection(imageView: self.imageView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
                     self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                     var poArr: [PredictObject] = []
                     var ct = 0
@@ -369,12 +386,17 @@ extension GHDetectionTool {
                         poArr.append(po)
                     }
                     
+                    if poArr.count < 5 { // 少于5个 直接认为失败
+                        self.doneNotice?(nil)
+                        return
+                    }
+                    
                     GHOpenCVBridge.shareManager().clearAllresLp()
                     GHOpenCVBridge.shareManager().createLightPointArray(poArr)
                     
                     var resultJsonString = ""
                     for (idx, _) in self.afterImgArray.enumerated() {
-                        let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: 0)
+                        let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType)
                         if idx == self.afterImgArray.count-1 {
                             resultJsonString = jsonStr
                         }
