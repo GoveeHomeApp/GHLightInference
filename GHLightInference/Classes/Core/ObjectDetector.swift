@@ -13,13 +13,13 @@ public class ObjectDetector {
     public var sku: String = ""
     
     public lazy var module: InferenceModule = {
-        if let path = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first, let module = InferenceModule(fileAtPath: path+"/Detection/best.torchscript.ptl") {
+        if let path = NSSearchPathForDirectoriesInDomains(.libraryDirectory, .userDomainMask, true).first, let module = InferenceModule(fileAtPath: path+"/Detection/best.torchscript.ptl", withNc: classes.count) {
             return module
         } else if let filePath = Bundle.main.path(forResource: "best.torchscript", ofType: "ptl"),
-            let module = InferenceModule(fileAtPath: filePath) {
+                  let module = InferenceModule(fileAtPath: filePath, withNc: classes.count) {
             return module
         } else if let fp = Bundle.bundleResource(of: GHLightInference.self)?.path(forResource: "best.torchscript", ofType: "ptl"),
-            let module = InferenceModule(fileAtPath: fp) {
+                  let module = InferenceModule(fileAtPath: fp, withNc: classes.count) {
             return module
         } else {
             fatalError("Failed to load model!")
