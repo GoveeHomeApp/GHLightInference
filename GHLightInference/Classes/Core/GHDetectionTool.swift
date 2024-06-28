@@ -226,11 +226,41 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.needGetFrame = true
     }
     
+    // 处理数组
+    func addNumbers(start: Int, end: Int, to array: inout [Int]) {
+        for number in start...end {
+            array.append(number)
+        }
+    }
+    
     // 灯效组装
     public func createEffectModel(step: Int, greenArray: [Int], redArray: [Int]) -> DetectionEffectModel {
+        var redArr = redArray
+        var greenArr = greenArray
         var colorDict: [UIColor: [Int]] = [:]
-        colorDict[UIColor.red] = redArray
-        colorDict[UIColor.green] = greenArray
+        switch self.bizType {
+        case 1:
+            redArr = []
+            greenArr = []
+            // H6820/1 处理颜色数组
+            for greenLamp in greenArray {
+                if greenLamp == 0 {
+                    addNumbers(start: 0, end: 10, to: &greenArr)
+                }  else {
+                    addNumbers(start: greenLamp*11, end: (greenLamp + 1)*11 - 1, to: &greenArr)
+                }
+            }
+            for redLamp in redArray {
+                if redLamp == 0 {
+                    addNumbers(start: 0, end: 10, to: &redArr)
+                }  else {
+                    addNumbers(start: redLamp*11, end: (redLamp + 1)*11 - 1, to: &redArr)
+                }
+            }
+        default:
+            colorDict[UIColor.red] = redArr
+            colorDict[UIColor.green] = greenArr
+        }
         let effect = DetectionEffectModel(frameStep: step, colorDict: colorDict)
         return effect
     }
@@ -350,9 +380,9 @@ extension GHDetectionTool {
             let res = points.trapezoidalPoints.removeLast()
             points.trapezoidalPoints.insert(res, at: 0)
             points.trapezoidalPoints.swapAt(2, 3) // 交换下标 1,2
-        }
-        for pt in points.trapezoidalPoints{
-            anchorPoints.append([CGFloat(pt.x), CGFloat(pt.y*3)])
+            for pt in points.trapezoidalPoints{
+                anchorPoints.append([CGFloat(pt.x), CGFloat(pt.y*3)])
+            }
         }
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0])
         return result
@@ -417,26 +447,26 @@ extension GHDetectionTool {
                     if let data = resultJsonString.data(using: .utf8) {
                         let dt = try?JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
                         let pointbase = LightQueueBase.deserialize(from: dt)
-                        if let pt = pointbase, !pt.lightPoints.isEmpty && !pt.trapezoidalPoints.isEmpty {
+                        if let pt = pointbase, !pt.lightPoints.isEmpty {
                             let detectionResult = self.doneDetection(points: pt)
                             self.doneNotice?(detectionResult)
                             let image = GHOpenCVBridge.shareManager().showLastOutlet()
                             self.finalImage = image
                             self.imageView.image = image
                             #if DEBUG
-                            self.resPointView.backgroundColor = UIColor.white
-                            for basRes in pt.lightPoints {
-                                // frame需要转换！！！
-                                let rectView = UIView(frame: CGRect(x: basRes.x/12, y: basRes.y/8, width: 2, height: 2))
-                                rectView.backgroundColor = UIColor.green
-                                self.resPointView.addSubview(rectView)
-                            }
-                            for traRes in pt.trapezoidalPoints {
-                                // frame需要转换！！！
-                                let rectView = UIView(frame: CGRect(x: traRes.x/12, y: traRes.y/8, width: 2, height: 2))
-                                rectView.backgroundColor = UIColor.blue
-                                self.resPointView.addSubview(rectView)
-                            }
+//                            self.resPointView.backgroundColor = UIColor.white
+//                            for basRes in pt.lightPoints {
+//                                // frame需要转换！！！
+//                                let rectView = UIView(frame: CGRect(x: basRes.x/12, y: basRes.y/8, width: 2, height: 2))
+//                                rectView.backgroundColor = UIColor.green
+//                                self.resPointView.addSubview(rectView)
+//                            }
+//                            for traRes in pt.trapezoidalPoints {
+//                                // frame需要转换！！！
+//                                let rectView = UIView(frame: CGRect(x: traRes.x/12, y: traRes.y/8, width: 2, height: 2))
+//                                rectView.backgroundColor = UIColor.blue
+//                                self.resPointView.addSubview(rectView)
+//                            }
                             self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
