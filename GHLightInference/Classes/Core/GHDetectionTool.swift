@@ -62,7 +62,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     var preImageArray: [UIImage] = []
     var afterImgArray: [UIImage] = []
     // 识别流程对象
-    private var inferencer = ObjectDetector.instance
+    private var inferencer = GHLightDetectManager.instance.detector()
     private var prepostProcessor: PrePostProcessor?
     // DEBUG专用
     public var imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 640, height: 640))
@@ -290,9 +290,9 @@ extension GHDetectionTool {
             }
             self.bizType = 1
         }
-        prepostProcessor = PrePostProcessor(config: cf)
-        ObjectDetector.instance.sku = sku
-        ObjectDetector.instance.dimension = self.dimension
+        prepostProcessor = GHLightDetectManager.instance.prepostProcessor(config: cf)
+        self.inferencer.sku = sku
+        self.inferencer.dimension = self.dimension
     }
 }
 

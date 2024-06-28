@@ -8,8 +8,6 @@ import UIKit
 
 public class ObjectDetector {
     
-    public private(set) static var instance = ObjectDetector()
-    
     public var sku: String = ""
     public var dimension: String = "3D" //默认3D
     
