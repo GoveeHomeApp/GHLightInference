@@ -47,6 +47,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // 业务参数
     public var sku: String = ""
     public var ic: Int = 0
+    public var dimension: String = "3D"
     // 0 - H70CX 1 - H682X
     var bizType: Int = 0
     
@@ -69,9 +70,10 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public var detectionImage: UIImage?
     public var finalImage: UIImage?
     
-    public init(sku: String, ic: Int, initializeFinishNotice:(() -> Void)? = nil, finishFrameNotice: ((Bool) -> Void)? = nil ,frameNotice: ((DetectionEffectModel) -> Void)? = nil, doneNotice: ((DetectionResult?) -> Void)? = nil) {
+    public init(sku: String, ic: Int, dimension: String, initializeFinishNotice:(() -> Void)? = nil, finishFrameNotice: ((Bool) -> Void)? = nil ,frameNotice: ((DetectionEffectModel) -> Void)? = nil, doneNotice: ((DetectionResult?) -> Void)? = nil) {
         self.sku = sku
         self.ic = ic
+        self.dimension = dimension
         self.initializeFinishNotice = initializeFinishNotice
         self.finishFrameNotice = finishFrameNotice
         self.frameNotice = frameNotice
@@ -290,6 +292,7 @@ extension GHDetectionTool {
         }
         prepostProcessor = PrePostProcessor(config: cf)
         ObjectDetector.instance.sku = sku
+        ObjectDetector.instance.dimension = self.dimension
     }
 }
 

@@ -11,9 +11,13 @@ public class ObjectDetector {
     public private(set) static var instance = ObjectDetector()
     
     public var sku: String = ""
+    public var dimension: String = "3D" //默认3D
     
     public lazy var module: InferenceModule = {
-        if let path = NSSearchPathForDirectoriesInDomains(.libraryDirectory, .userDomainMask, true).first, let module = InferenceModule(fileAtPath: path+"/Detection/\(sku)/best.torchscript.ptl", withNc: classes.count) {
+        if let path = NSSearchPathForDirectoriesInDomains(.libraryDirectory, .userDomainMask, true).first, let module = InferenceModule(fileAtPath: path+"/Detection/\(sku)/\(dimension)/best.torchscript.ptl", withNc: classes.count) {
+            return module
+        } else if let path = NSSearchPathForDirectoriesInDomains(.libraryDirectory, .userDomainMask, true).first, let module = InferenceModule(fileAtPath: path+"/Detection/\(sku)/3D/best.torchscript.ptl", withNc: classes.count) {
+            // 给2D兜底
             return module
         } else if let filePath = Bundle.main.path(forResource: "best.torchscript", ofType: "ptl"),
                   let module = InferenceModule(fileAtPath: filePath, withNc: classes.count) {
