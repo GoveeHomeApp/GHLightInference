@@ -12,15 +12,17 @@ import Photos
 
 // AVFoundation 必须是OC类
 public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    
+    /* ========== 通知业务层closure ========== */
+    // 初始化完成Notice
     public var initializeFinishNotice: (() -> Void)?
-    
+    // 取帧流程结束Notice
     public var finishFrameNotice: ((Bool) -> Void)?
     // 取帧Notice（每一帧需要的灯效， 开始成功就返回第一帧）
     public var frameNotice: ((DetectionEffectModel) -> Void)?
     // 完成Notice
     public var doneNotice: ((DetectionResult?) -> Void)?
     
+    /* ========== 业务层回调closure ========== */
     // 开始 & 重新开始 带有transaction
     public private(set) var startHandler: ((String) -> Void)?
     // 中断
@@ -28,9 +30,10 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // 取帧（第几步 ps:第几次取帧 从序号1开始）
     public private(set) var frameHandler:((Int) -> Void)?
     
+    /* ========== 私有closure ========== */
     private var capFinishHandler: (() -> Void)?
     
-    // 识别transaction
+    // 识别流程唯一transaction 每次整体流程都是唯一的 结束会被置空
     private var transaction: String? {
         didSet {
             if let t = transaction {
@@ -41,27 +44,28 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             }
         }
     }
-    
+    // 业务参数
     public var sku: String = ""
     public var ic: Int = 0
+    // 0 - H70CX 1 - H682X
     var bizType: Int = 0
     
+    // 取帧相关
     var captureSession: AVCaptureSession!
     var videoOutput: AVCaptureVideoDataOutput!
-    // 直接拿Layer
+    // 业务层直接拿的展示Layer
     public private(set) var previewLayer: AVCaptureVideoPreviewLayer?
-    
+    // 取帧参数
     var needGetFrame: Bool = false
+    // 对齐前后图片数组
     var preImageArray: [UIImage] = []
     var afterImgArray: [UIImage] = []
-    
+    // 识别流程对象
     private var inferencer = ObjectDetector.instance
     private var prepostProcessor: PrePostProcessor?
-    
+    // DEBUG专用
     public var imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 640, height: 640))
-    
     public var resPointView = UIView(frame: CGRect(x: 0, y: 0, width: 160, height: 160))
-    
     public var detectionImage: UIImage?
     public var finalImage: UIImage?
     
@@ -73,14 +77,16 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.frameNotice = frameNotice
         self.doneNotice = doneNotice
         super.init()
+        // 准备识别参数
         self.prepareConfig(sku: sku)
+        // 初始化回调
         self.setupBindings()
+        // 启动AVFoundation
         self.startingIFrame()
-        
     }
     
-     func setupAV(finishHandler: ((Bool) -> Void)?) {
-        // TODO: 进入后要先获取相机权限?
+    // 初始化AVCaptureSession
+    func setupAV(finishHandler: ((Bool) -> Void)?) {
         AuthManager.instance.authorizedCameraWith { isSuccess in
             if !isSuccess {
                 finishHandler?(false)
@@ -118,6 +124,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         }
     }
     
+    // 开始第X帧截取 通知业务层灯效
     func startCaptureFrame(step: Int) {
         print("log.f ==== 取第\(step)帧效果")
         let colorTwoDimArray = GHOpenCVBridge.shareManager().getColorsByStep(step)
@@ -137,10 +144,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
     // 启动摄像头
     func startingIFrame() {
-        
         // 初始化识别侧灯效数组
         GHOpenCVBridge.shareManager().createAllStep(byIc: self.ic)
-        
         self.setupAV { [weak self] isSuccess in
             guard let `self` = self else { return }
             if !isSuccess {
@@ -219,6 +224,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.needGetFrame = true
     }
     
+    // 灯效组装
     public func createEffectModel(step: Int, greenArray: [Int], redArray: [Int]) -> DetectionEffectModel {
         var colorDict: [UIColor: [Int]] = [:]
         colorDict[UIColor.red] = redArray
@@ -227,6 +233,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         return effect
     }
     
+    // 取帧图像处理
     func getImageFromSampleBuffer(sampleBuffer: CMSampleBuffer) -> UIImage? {
         let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
         CVPixelBufferLockBaseAddress(imageBuffer!, CVPixelBufferLockFlags(rawValue: 0))
@@ -255,7 +262,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             self.needGetFrame = false
         }
     }
-    
+    // 牺牲质量放缩
     func scaleImage(_ image: UIImage, toSize newSize: CGSize) -> UIImage? {
         UIGraphicsBeginImageContextWithOptions(newSize, false, 0.0)
         image.draw(in: CGRect(x: 0, y: 0, width: newSize.width, height: newSize.height))
@@ -311,7 +318,7 @@ extension GHDetectionTool {
             }
         })
     }
-    
+    // 对齐
     func alignmentAll(finishHandler: () -> Void) {
         for (index, image) in self.preImageArray.enumerated() {
             do {
@@ -331,8 +338,9 @@ extension GHDetectionTool {
             finishHandler()
         }
     }
-    
+    // 结果组装返回
     func doneDetection(points: LightQueueBase) -> DetectionResult? {
+        // TODO: 根据bizType 定义不同的返回
         var pointsDict: [Int: [CGFloat]] = [:]
         for res in points.lightPoints {
             let ptArray = [CGFloat(res.x), CGFloat(res.y*3)]
@@ -351,7 +359,7 @@ extension GHDetectionTool {
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0])
         return result
     }
-    
+    // 识别灯珠
     func runDetection() {
         // 只对第二张图进行识别
         if let prepostProcessor = self.prepostProcessor {
