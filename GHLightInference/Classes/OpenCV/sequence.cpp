@@ -257,15 +257,20 @@ vector<vector<int>> getColors(int frameStep) {
  * @return
  */
 int getNonSequenceType(int inferredLightIndex, int lightType) {
-    if (lightType == TYPE_H682X) {
-        int greenRet = greenMap[inferredLightIndex];
-        if (greenRet == -1) {
-            LOGE(LOG_TAG, "非推断序号");
-            return -1;
+    try {
+        if (lightType == TYPE_H682X) {
+            int greenRet = greenMap[inferredLightIndex];
+            if (greenRet == -1) {
+                LOGE(LOG_TAG, "非推断序号");
+                return -1;
+            }
+            return greenRet;
+        } else {
+            return ((inferredLightIndex + 1) / 2 - 1) % 4;
         }
-        return greenRet;
-    } else {
-        return ((inferredLightIndex + 3) / 2) % 4;
+    } catch (...) {
+        LOGE(LOG_TAG, "getNonSequenceType error");
+        return -1;
     }
 }
 

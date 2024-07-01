@@ -31,8 +31,6 @@ vector<Point> pPointXys;
 unordered_map<int, vector<LightPoint>> pointsStepMap;
 //记录有效帧
 unordered_map<int, Mat> frameStepMap;
-//识别点的区域范围 4个点
-int pointsAreaTop = -1, pointsAreaLeft = -1, pointsAreaRight = -1, pointsAreaBottom = -1;
 /**
 * 得分错点集合
 */
@@ -85,9 +83,9 @@ void release() {
     pPointXys.shrink_to_fit();
     pPoints.clear();
     pPoints.shrink_to_fit();
-    pointsAreaTop = -1, pointsAreaLeft = -1, pointsAreaRight = -1, pointsAreaBottom = -1;
     sequenceTypeMap.clear();
     errorSerialVector.clear();
+    errorSerialVector.shrink_to_fit();
 }
 
 /**
@@ -101,55 +99,26 @@ void release() {
 String
 sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP,
                 vector<Mat> &outMats) {
-//    signal(SIGSEGV, signal_handler);
-//    if (setjmp(jump_buffer) == 1) {
-//        LOGE(LOG_TAG, "sortStripByStep 捕获异常状态---返回识别结果");
-//        return "{}";
-//    }
     lightType = lightTypeP;
     try {
         if (frameStep == STEP_VALID_FRAME_START) {
             Mat src = frameStepMap[frameStep].clone();
             if (!pPointXys.empty())pPointXys.clear();
-            if (resultObjects.empty()) {
-                findByContours(src, pPointXys, getIcNum(), outMats);
-            } else {
-                for (int i = 0; i < resultObjects.size(); i++) {
-                    LightPoint curPoint = resultObjects[i];
-                    Rect_<int> rect = curPoint.tfRect;
-                    Point center = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                    curPoint.point2f = center;
-                    curPoint.with = rect.width;
-                    curPoint.height = rect.height;
-                    pPointXys.push_back(center);
-                }
+            if (lightTypeP == TYPE_H682X) {
+                //面状灯
+                findNoodleLamp(src, pPointXys, resultObjects, outMats);
+                LOGD(LOG_TAG, "findNoodleLamp resultObjects %d", resultObjects.size());
+
+            } else if (resultObjects.empty()) {
+                findByContours(src, pPointXys, resultObjects, getIcNum(), outMats);
             }
-            for (int i = 0; i < pPointXys.size(); i++) {
-                LightPoint curPoint;
-                if (!resultObjects.empty() && i < resultObjects.size()) {
-                    curPoint = resultObjects[i];
-                } else {
-                    curPoint = LightPoint();
-                }
-                Point center = pPointXys[i];
-                curPoint.point2f = pPointXys[i];
+            for (int i = 0; i < resultObjects.size(); i++) {
+                LightPoint curPoint = resultObjects[i];
+//                LOGD(LOG_TAG, "sortStripByStep  %f x %f  center=(%d,%d)", curPoint.with,
+//                     curPoint.height, curPoint.point2f.x, curPoint.point2f.y);
+                pPointXys.push_back(curPoint.point2f);
                 pPoints.push_back(curPoint);
-                if (i == 0 || pointsAreaTop > center.y) {
-                    pointsAreaTop = center.y;
-                }
-                if (i == 0 || pointsAreaBottom < center.y) {
-                    pointsAreaBottom = center.y;
-                }
-                if (i == 0 || pointsAreaLeft > center.x) {
-                    pointsAreaLeft = center.x;
-                }
-                if (i == 0 || pointsAreaRight < center.x) {
-                    pointsAreaRight = center.x;
-                }
             }
-            LOGD(LOG_TAG,
-                 "pointsAreaTop=%d,pointsAreaBottom=%d,pointsAreaLeft=%d,pointsAreaRight=%d",
-                 pointsAreaTop, pointsAreaBottom, pointsAreaLeft, pointsAreaRight);
         }
 
         if (frameStep == STEP_VALID_FRAME_START && !pPoints.empty()) {
@@ -159,11 +128,21 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
                     FONT_HERSHEY_SIMPLEX, 0.5,
                     Scalar(0, 0, 0), 2);
             for (int i = 0; i < pPoints.size(); i++) {
-                LightPoint curPoint = pPoints[pPoints.size()];
-
-                Rect roi;
-                pPoints[i].buildRect(originalFrame1C, roi);
-                rectangle(originalFrame1C, roi, Scalar(0, 255, 255), 4);
+                LightPoint curPoint = pPoints[i];
+                if (!curPoint.rotatedRect.size.empty()) {
+                    Point2f vertices[4];
+                    // 获取旋转矩形的四个顶点
+                    curPoint.rotatedRect.points(vertices);
+                    // 绘制旋转矩形
+                    for (int j = 0; j < 4; ++j) {
+                        cv::line(originalFrame1C, vertices[j], vertices[(j + 1) % 4],
+                                 cv::Scalar(0, 255, 0), 2);
+                    }
+                } else {
+                    Rect roi;
+                    pPoints[i].buildRect(originalFrame1C, roi);
+                    rectangle(originalFrame1C, roi, Scalar(255, 0, 50), 4);
+                }
                 if (i == pPoints.size() - 1) {
                     outMats.push_back(originalFrame1C);
                 }
@@ -182,33 +161,95 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
     if (pointsStepMap.size() == getMaxStepCnt()) {
         //--------------------------------------- 开始识别 ---------------------------------------
         vector<Point2i> trapezoid4Points;
-        vector<LightPoint> points = sortLampBeads(frameStepMap[STEP_VALID_FRAME_START], outMats,
-                                                  trapezoid4Points);
+        LampBeadsProcessor processor = sortLampBeads(frameStepMap[STEP_VALID_FRAME_START], outMats,
+                                                     trapezoid4Points);
         release();
         //回调函数
-        return splicedJson(lightPointsToJson(points), point2iToJson(trapezoid4Points));
+        return splicedJson(lightPointsToJson(processor.totalPoints),
+                           point2iToJson(trapezoid4Points));
     }
     return "";
 }
 
+void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outMats) {
+    try {
+        //输出一张好点图
+        vector<Point2i> points;
+        Mat dstCircle = src.clone();
+        for (int i = 0; i < pPoints.size(); i++) {
+            LightPoint lpoint = pPoints[i];
+            if (!lpoint.rotatedRect.size.empty()) {
+                Point2f vertices[4];
+                // 获取旋转矩形的四个顶点
+                lpoint.rotatedRect.points(vertices);
+                // 绘制旋转矩形
+                for (int j = 0; j < 4; ++j) {
+                    cv::line(dstCircle, vertices[j], vertices[(j + 1) % 4],
+                             cv::Scalar(0, 255, 0), 2);
+                }
+            } else {
+                Rect roi;
+                pPoints[i].buildRect(src, roi);
+                if (pPoints[i].errorStatus != NORMAL) {
+                    rectangle(dstCircle, roi, Scalar(255, 255, 0, 150), 2);
+                } else {
+                    rectangle(dstCircle, roi, Scalar(0, 0, 0, 150), 2);
+                }
+            }
+        }
+
+        for (int i = 0; i < processor.totalPoints.size(); i++) {
+            LightPoint lpoint = processor.totalPoints[i];
+            Point2f center = lpoint.point2f;
+            center.x = static_cast<int>(center.x);
+            center.y = static_cast<int>(center.y);
+            points.push_back(center);
+            if (!lpoint.rotatedRect.size.empty()) {
+                Point2f vertices[4];
+                // 获取旋转矩形的四个顶点
+                lpoint.rotatedRect.points(vertices);
+                // 绘制旋转矩形
+                for (int j = 0; j < 4; ++j) {
+                    cv::line(dstCircle, vertices[j], vertices[(j + 1) % 4],
+                             cv::Scalar(0, 255, 0), 2);
+                }
+            } else {
+                Rect roi;
+                pPoints[i].buildRect(src, roi);
+                rectangle(dstCircle, roi, Scalar(0, 255, 255, 150), 2);
+            }
+            if (lightType == TYPE_H682X) {
+                putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
+                        FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        Scalar(255, 0, 0),
+                        1);
+            } else {
+                putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
+                        FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        Scalar(0, 255, 255),
+                        1);
+            }
+        }
+        outMats.push_back(dstCircle);
+    } catch (...) {
+        LOGE(LOG_TAG, "异常状态11");
+    }
+}
+
+
 /**
  * 对灯带光点排序
  */
-
-vector<LightPoint>
+LampBeadsProcessor
 sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points) {
     int scoreMin = getScoreMin();
     int scoreMax = getScoreMax();
     int maxFrameStep = getMaxStepCnt();
 
     LampBeadsProcessor processor = LampBeadsProcessor(scoreMin, scoreMax, maxFrameStep);
-    if (pPoints.empty())return processor.totalPoints;
-
-//    signal(SIGSEGV, signal_handler);
-//    if (setjmp(jump_buffer) == 1) {
-//        LOGE(LOG_TAG, "sortLampBeads 捕获异常状态---返回识别结果");
-//        return processor.totalPoints;
-//    }
+    if (pPoints.empty())return processor;
 
     LOGW(LOG_TAG, "sortLampBeads pPoints=%d   scoreMin=%d , scoreMax = %d ,endStep = %d",
          pPoints.size(), scoreMin, scoreMax, maxFrameStep);
@@ -228,10 +269,12 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
 
     if (ret == 0) {
         LOGE(LOG_TAG, "统计得分失败");
-        return processor.totalPoints;
+        return processor;
     }
     /*处理分值相同的点*/
     decideSameScorePoint(processor, src, outMats);
+
+    if (processor.normalPoints.empty())return processor;
 
     sort(processor.normalPoints.begin(), processor.normalPoints.end(), compareIndex);
 
@@ -241,7 +284,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
     /*推测中间夹点*/
     decisionCenterPoints(processor, src);
 
-    if (processor.totalPoints.size() < 4)return processor.totalPoints;
+    if (processor.totalPoints.size() < 4)return processor;
 
     //对补全的点进行排序
     sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
@@ -259,84 +302,52 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
     if (lightType != TYPE_H682X) {
         deleteDiscontinuousPoints(processor);
     } else {
-        int size = processor.totalPoints.size();
-        for (int i = 0; i < size; i++) {
-            if (i >= processor.totalPoints.size() - 1)continue;
-            LightPoint curLPoint = processor.totalPoints[i];
-            LightPoint nextLPoint = processor.totalPoints[i + 1];
-            LOGD(LOG_TAG, "   i= %d=== curLPoint= %d===nextLPoint= %d", i, curLPoint.lightIndex,
-                 nextLPoint.lightIndex);
-            int curLightIndex;
-            if (i == 0 && curLPoint.lightIndex > 1) {
-                curLightIndex = curLPoint.lightIndex - 1;
-                LOGD(LOG_TAG, " 推断1====  curLightIndex=%d ", curLightIndex);
-                //找出最接近的点位
-                LightPoint inferredPoint = findLamp(curLPoint.point2f, averageDistance / 0.45 * 2,
-                                                    true,
-                                                    curLightIndex, processor);
+        try {
+            int size = processor.totalPoints.size();
+            for (int i = 0; i < size; i++) {
+                if (i >= processor.totalPoints.size() - 1)continue;
+                LightPoint curLPoint = processor.totalPoints[i];
+                LightPoint nextLPoint = processor.totalPoints[i + 1];
+                LOGD(LOG_TAG, "   i= %d=== curLPoint= %d===nextLPoint= %d", i, curLPoint.lightIndex,
+                     nextLPoint.lightIndex);
+                int curLightIndex;
+                if (i == 0 && curLPoint.lightIndex > 1) {
+                    curLightIndex = curLPoint.lightIndex - 1;
+                    LOGD(LOG_TAG, " 推断1====  curLightIndex=%d ", curLightIndex);
+                    //找出最接近的点位
+                    LightPoint inferredPoint = findLamp(curLPoint.point2f,
+                                                        averageDistance / 0.45 * 2,
+                                                        true,
+                                                        curLightIndex, processor);
 
-                if (inferredPoint.errorStatus != EMPTY_POINT)
-                    processor.totalPoints.push_back(inferredPoint);
-            }
-            if (nextLPoint.lightIndex - curLPoint.lightIndex > 1) {
-                curLightIndex = curLPoint.lightIndex + 1;
-                LOGD(LOG_TAG,
-                     " 推断====  curLightIndex=%d ", curLightIndex);
-                //找出最接近的点位
-                LightPoint inferredPoint = findLamp(curLPoint.point2f, averageDistance / 0.45 * 2,
-                                                    true,
-                                                    curLightIndex, processor);
-
-                if (inferredPoint.errorStatus != EMPTY_POINT) {
-                    processor.totalPoints.push_back(inferredPoint);
+                    if (inferredPoint.errorStatus != EMPTY_POINT)
+                        processor.totalPoints.push_back(inferredPoint);
                 }
+                if (nextLPoint.lightIndex - curLPoint.lightIndex > 1) {
+                    curLightIndex = curLPoint.lightIndex + 1;
+                    LOGD(LOG_TAG,
+                         " 推断====  curLightIndex=%d ", curLightIndex);
+                    //找出最接近的点位
+                    LightPoint inferredPoint = findLamp(curLPoint.point2f,
+                                                        averageDistance / 0.45 * 2,
+                                                        true,
+                                                        curLightIndex, processor);
+
+                    if (inferredPoint.errorStatus != EMPTY_POINT) {
+                        processor.totalPoints.push_back(inferredPoint);
+                    }
+                }
+
             }
-
+        } catch (...) {
+            LOGE(LOG_TAG, "异常装10");
         }
     }
 
-    //输出一张好点图
-    vector<Point2i> points;
-    Mat dstCircle = src.clone();
-    for (int i = 0; i < pPoints.size(); i++) {
-        Rect roi;
-        pPoints[i].buildRect(src, roi);
-        if (pPoints[i].errorStatus != NORMAL) {
-            rectangle(dstCircle, roi, Scalar(255, 255, 0, 150), 2);
-        } else {
-            rectangle(dstCircle, roi, Scalar(0, 0, 0, 150), 2);
-        }
-    }
-
-    for (int i = 0; i < processor.totalPoints.size(); i++) {
-        Point2f center = processor.totalPoints[i].point2f;
-        center.x = static_cast<int>(center.x);
-        center.y = static_cast<int>(center.y);
-        points.push_back(center);
-        Rect roi;
-        pPoints[i].buildRect(src, roi);
-        rectangle(dstCircle, roi, Scalar(0, 255, 255, 150), 2);
-        if (lightType == TYPE_H682X) {
-            putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
-                    FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    Scalar(0, 0, 0),
-                    1);
-        } else {
-            putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
-                    FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    Scalar(0, 255, 255),
-                    1);
-        }
-    }
-
-    Mat outMat = dstCircle.clone();
-
-    outMats.push_back(outMat);
-    outMats.push_back(dstCircle);
-    return processor.totalPoints;
+    drawPointsMatOut(src, processor, outMats);
+    return processor;
 }
+
 
 /**
  * 统计所有得分
@@ -403,11 +414,11 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
             sequenceTypeMap[1].push_back(pPoints[i]);
             continue;
         }
-        if (score == getScoreMax()) {
+        if (score == getScoreMax() - 1 && lightType != TYPE_H682X) {
             sequenceTypeMap[2].push_back(pPoints[i]);
             continue;
         }
-        if (score == getScoreMax() - 1) {
+        if (score == (getScoreMax() - 2) && lightType != TYPE_H682X) {
             sequenceTypeMap[3].push_back(pPoints[i]);
             continue;
         }
@@ -432,9 +443,9 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
     }
 
     LOGW(LOG_TAG,
-         "greenSameVector = %d   redSameVector = %d  max = %d   max2 = %d   errorSerialVector = %d",
-         sequenceTypeMap[1].size(),
+         "redSameVector = %d  greenSameVector = %d   max = %d   max2 = %d   errorSerialVector = %d",
          sequenceTypeMap[0].size(),
+         sequenceTypeMap[1].size(),
          sequenceTypeMap[2].size(),
          sequenceTypeMap[3].size(), errorSerialVector.size());
     return 1;
@@ -479,6 +490,7 @@ void deleteEstablishGroupPoints(Mat &src, vector<Mat> &outMats) {
 void
 decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
     //补充不连续段落,记录 last 临时存储 -1的原因是为了补0
+    LOGD(LOG_TAG, "推测中间夹点");
     int lastLightIndex = -999999;
     LightPoint lastPoint = LightPoint();
 
@@ -487,24 +499,19 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
         processor.totalPoints.push_back(normalPoint);
         //与上一个点的间隔
         int diff = normalPoint.lightIndex - lastLightIndex - 1;
-        if (diff == 0) {
-            int size = processor.sameSerialNumMap[normalPoint.lightIndex].size();
-            LOGW(LOG_TAG, "1. 当前点与上一次点重复，size=%d", size);
-            continue;
-        }
-        if (lastLightIndex == -999999 || diff != 1) {
+        if (lastLightIndex == -999999 || diff < 1) {
             //标记灯序作为下一次遍历节点
             lastLightIndex = normalPoint.lightIndex;
             lastPoint = normalPoint;
             continue;
         }
-        if (int size = processor.sameSerialNumMap[normalPoint.lightIndex].size() > 1) {
-//            LOGW(LOG_TAG, "当前点重复，size=%d", size);
-        }
+
         LightPoint centerP = inferredCenter(processor, normalPoint, lastPoint);
         if (centerP.errorStatus != EMPTY_POINT && centerP.lightIndex < getIcNum() &&
             centerP.lightIndex >= 0)
             processor.totalPoints.push_back(centerP);
+        lastLightIndex = normalPoint.lightIndex;
+        lastPoint = normalPoint;
     }
     LOGD(LOG_TAG, "normalPoints = %d totalPoints = %d", processor.normalPoints.size(),
          processor.totalPoints.size());
@@ -515,6 +522,7 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
  * 从红绿固定点和错点中推测点位
  */
 void decisionRightLeftPoints(LampBeadsProcessor &processor) {
+    LOGD(LOG_TAG, "decisionRightLeftPoints");
     bool enable4BeginLeft = true;//起点往前补点
     for (auto it = processor.totalPoints.begin();
          it <= processor.totalPoints.end(); ++it) {
@@ -639,8 +647,8 @@ void decisionRightLeftPoints(LampBeadsProcessor &processor) {
 
 /**删除不连续错点*/
 void deleteDiscontinuousPoints(LampBeadsProcessor &processor) {
-    LOGD(LOG_TAG, "删除不连续错点");
     int size = processor.totalPoints.size();
+    LOGD(LOG_TAG, "删除不连续错点 size=%d", size);
     vector<int> errorPointIndexVector;
     //补充左侧的走向推断
     for (int i = 1; i < processor.totalPoints.size() - 1; i++) {
@@ -653,7 +661,7 @@ void deleteDiscontinuousPoints(LampBeadsProcessor &processor) {
                               lastLPoint.lightIndex ==
                               (processor.totalPoints[i - 2].lightIndex + 1);
 
-        double distance4Last = norm(curLPoint.point2f - lastLPoint.point2f) /
+        double distance4Last = max(norm(curLPoint.point2f - lastLPoint.point2f), 1.0) /
                                max((curLPoint.lightIndex * 1.0 - lastLPoint.lightIndex), 1.0);
 
         bool nextContinuous =
@@ -661,7 +669,7 @@ void deleteDiscontinuousPoints(LampBeadsProcessor &processor) {
                 i < (processor.totalPoints.size() - 2) &&
                 nextLPoint.lightIndex == (processor.totalPoints[i + 2].lightIndex - 1);
 
-        double distance4Next = norm(nextLPoint.point2f - curLPoint.point2f) /
+        double distance4Next = max(norm(nextLPoint.point2f - curLPoint.point2f), 1.0) /
                                max((nextLPoint.lightIndex * 1.0 - curLPoint.lightIndex), 1.0);
 
         if (lastContinuous && abs(distance4Last) > averageDistanceThreshold) {
@@ -675,6 +683,11 @@ void deleteDiscontinuousPoints(LampBeadsProcessor &processor) {
     }
 
     for (int i = errorPointIndexVector.size() - 1; i >= 0; i--) {
+        int pointIndex = errorPointIndexVector[i];
+        if (pointIndex >= processor.totalPoints.size() || pointIndex < 0) {
+            LOGE(LOG_TAG, "擦除脏数据失败");
+            return;
+        }
         LOGD(LOG_TAG, "erase index=%d, lightIndex=%d", errorPointIndexVector[i],
              processor.totalPoints[errorPointIndexVector[i]].lightIndex);
         processor.totalPoints.erase(processor.totalPoints.begin() + errorPointIndexVector[i]);
@@ -684,6 +697,7 @@ void deleteDiscontinuousPoints(LampBeadsProcessor &processor) {
 
 /**处理剩余无序点位*/
 void decisionRemainingPoints(LampBeadsProcessor &processor) {
+    LOGD(LOG_TAG, "decisionRemainingPoints");
     int size = processor.totalPoints.size();
     for (int i = 1; i < size - 1; i++) {
         LightPoint curLPoint = processor.totalPoints[i];
@@ -713,9 +727,10 @@ void decisionRemainingPoints(LampBeadsProcessor &processor) {
 
         int lastDiff = curLPoint.lightIndex - lastLPoint.lightIndex;
         if (lastDiff > 2) {
-            LOGD(LOG_TAG, "【补点-Z】= %d", curLPoint.lightIndex - 1);
+            LOGD(LOG_TAG, "【补点-Z】= %d  averageDistance = %d", curLPoint.lightIndex - 1,
+                 processor.averageDistance);
             LightPoint inferredPoint = findLamp(curLPoint.point2f,
-                                                processor.averageDistance / 0.7, false,
+                                                processor.averageDistance / 0.45, false,
                                                 curLPoint.lightIndex - 1, processor);
             if (inferredPoint.errorStatus != EMPTY_POINT) {
                 processor.totalPoints.push_back(inferredPoint);
@@ -732,6 +747,7 @@ void
 decideSameScorePoint(LampBeadsProcessor &processor, Mat &src, vector<Mat> &outMats) {
     Mat samePoint = src.clone();
     LOGV(LOG_TAG, "处理同色得分点");
+    if (processor.sameSerialNumMap.empty())return;
     /*
      * 1. 计算可信度最高的点
      */
@@ -873,11 +889,10 @@ LightPoint inferredCenter(LampBeadsProcessor &processor, LightPoint &A, LightPoi
              processor.averageDistance, A.lightIndex);
         return LightPoint(EMPTY_POINT);
     }
-
-    LOGD(LOG_TAG,
-         "【Center】cur = %d, last = %d diffX = %f diffY = %f", A.lightIndex,
-         lastLightIndex, diffSegmentLenX, diffSegmentLenY);
     int curLightIndex = lastLightIndex + 1;
+    LOGD(LOG_TAG,
+         "【Center】推断 %d  cur = %d, last = %d diffX = %f diffY = %f", curLightIndex, A.lightIndex,
+         lastLightIndex, diffSegmentLenX, diffSegmentLenY);
     int x = B.point2f.x + diffSegmentLenX;
     int y = B.point2f.y + diffSegmentLenY;
 
@@ -910,8 +925,8 @@ LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, LampBeadsProcessor &pro
     }
 
     LOGD(LOG_TAG,
-         "当前点：%d 推断点：%d  diff : %d  diffSegmentLenX : %f  diffSegmentLenY : %f ",
-         B.lightIndex, inferredLightIndex, diff, diffSegmentLenX, diffSegmentLenY);
+         "当前点：%d  A:%d 推断点：%d  diff : %d  diffSegmentLenX : %f  diffSegmentLenY : %f ",
+         B.lightIndex, A.lightIndex, inferredLightIndex, diff, diffSegmentLenX, diffSegmentLenY);
 
     Point2i center = Point2i(x, y);
     double distanceMin = sqrt(
@@ -949,10 +964,10 @@ Mat alignImg(Mat &src, Mat &trans, bool back4Matrix) {
         // 创建掩膜，指定搜索区域
         Mat mask = Mat::zeros(trans.size(), CV_8UC1);
         Rect searchRegion;
-        searchRegion = Rect(pointsAreaLeft, pointsAreaTop, pointsAreaRight - pointsAreaLeft,
-                            pointsAreaBottom - pointsAreaTop);
+//        searchRegion = Rect(pointsAreaLeft, pointsAreaTop, pointsAreaRight - pointsAreaLeft,
+//                            pointsAreaBottom - pointsAreaTop);
         int area = searchRegion.width * searchRegion.height;
-        if (area < 25) {
+        if (area < 25 && !searchRegion.empty()) {
             // 假设我们只想在目标图像的一个特定区域内搜索
             LOGE(LOG_TAG, "area < 25,use hard rect");
             searchRegion = Rect(120, 80, 400, 480); // x, y, width, height
@@ -1007,10 +1022,12 @@ findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &
     vector<LightPoint> result;
     if (src.empty())return result;
     Mat meanColorMat = src.clone();
+    // 转换到HSV色彩空间
+    cv::Mat image = src.clone();
     for (int i = 0; i < points.size(); i++) {
         LightPoint lPoint = points[i];
         Scalar scalar;
-        LightPoint lightPoint = meanColor(src, stepFrame, lPoint, meanColorMat);
+        LightPoint lightPoint = meanColor(image, stepFrame, lPoint, meanColorMat);
         result.push_back(lightPoint);
     }
     outMats.push_back(meanColorMat);
@@ -1020,54 +1037,70 @@ findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &
 /**
  * 获取区域 hsv 色相
  */
-LightPoint meanColor(Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColorMat) {
-    if (src.empty()) {
+LightPoint meanColor(Mat &image, int stepFrame, LightPoint &lPoint, Mat &meanColorMat) {
+    if (image.empty()) {
         LOGE(LOG_TAG, "meanColor(stepFrame=%d): Error: Image not found!", stepFrame);
         return LightPoint();
-
     }
     try {
-        Point2f point = lPoint.point2f;
         Rect roi;
-        Mat region = lPoint.buildRect(src, roi);
-
-        if (region.empty()) {
-            LOGE(LOG_TAG, "region is empty!");
-            return lPoint.copyPoint(E_W, Scalar());
+        Scalar avgPixelIntensity;
+        Mat region;
+        Point2f point = lPoint.point2f;
+        CUS_COLOR_TYPE colorType = E_W;
+        if (lightType == TYPE_H682X && !lPoint.rotatedRect.size.empty()) {
+            // 创建掩码
+            cv::Mat mask = cv::Mat::zeros(image.size(), CV_8UC1);
+            // 绘制 RotatedRect 到掩码上
+            Point2f vertices[4];
+            lPoint.rotatedRect.points(vertices);
+            std::vector<cv::Point> contour(vertices, vertices + 4);
+            cv::fillPoly(mask, vector<std::vector<cv::Point>>{contour}, cv::Scalar(255));
+            // 提取HSV值
+            image.copyTo(region, mask);
+            avgPixelIntensity = mean(region, mask);
+            roi = lPoint.rotatedRect.boundingRect();
+        } else {
+            region = lPoint.buildRect(image, roi);
+            if (region.empty()) {
+                LOGE(LOG_TAG, "region is empty!");
+                return lPoint.copyPoint(E_W, Scalar());
+            }
+            avgPixelIntensity = mean(region);
         }
-
-        Scalar avgPixelIntensity = mean(region);
-
         double green = avgPixelIntensity[1];
         double red = avgPixelIntensity[2];
 
-        Mat hsv;
-        cvtColor(region, hsv, COLOR_BGR2HSV);
-        Scalar mean = cv::mean(hsv);
-
-        CUS_COLOR_TYPE colorType = E_W;
-        Scalar color = Scalar(0, 255, 255);
-        rectangle(meanColorMat, roi, color, 2);
         if (red > green) {//red > blue &&
             colorType = E_RED;
-            putText(meanColorMat,
-                    "red", point, FONT_HERSHEY_SIMPLEX, 0.5,
-                    color, 1);
-
         } else if (green > red) {// && green > blue
             colorType = E_GREEN;
-            putText(meanColorMat,
-                    "green", point, FONT_HERSHEY_SIMPLEX, 0.5,
-                    color, 1);
         } else {
             LOGV(LOG_TAG, "meanColor= 无法识别");
-            putText(meanColorMat,
-                    "UnKnow", point, FONT_HERSHEY_SIMPLEX, 0.5,
-                    color, 1);
         }
 
-        return lPoint.copyPoint(colorType, mean);
-    } catch (...) {
+        if (!meanColorMat.empty()) {//绘制测试图片
+            Scalar color = Scalar(0, 255, 255);
+            if (!roi.empty())
+                rectangle(meanColorMat, roi, color, 2);
+            if (red > green) {//red > blue &&
+                putText(meanColorMat,
+                        "red", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                        color, 1);
+
+            } else if (green > red) {// && green > blue
+                putText(meanColorMat,
+                        "green", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                        color, 1);
+            } else {
+                putText(meanColorMat,
+                        "UnKnow", point, FONT_HERSHEY_SIMPLEX, 0.5,
+                        color, 1);
+            }
+        }
+        return lPoint.copyPoint(colorType, avgPixelIntensity);
+    }
+    catch (...) {
         LOGE(LOG_TAG, "========》 异常2");
         return lPoint.copyPoint(E_W, Scalar());
     }
@@ -1166,8 +1199,6 @@ findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLi
         LOGE(LOG_TAG, "非推断序号");
         return LightPoint(EMPTY_POINT);
     }
-
-    vector<LightPoint> points;
     LightPoint findLp = findLampInVector(center, minDistance, checkDistance,
                                          sequenceTypeMap[sequenceType], sequenceType);
 
@@ -1186,8 +1217,9 @@ findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLi
  */
 LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDistance,
                             vector<LightPoint> &points, int type) {
-    if (checkDistance && minDistance > 150 && lightType != TYPE_H682X) {
-        LOGE(LOG_TAG, "找不到推断点,距离过大----> %d", type);
+
+    if (points.empty() || (checkDistance && minDistance > 150 && lightType != TYPE_H682X)) {
+        LOGE(LOG_TAG, "找不到推断点,距离过大----> %d points=%d", type, points.size());
         return LightPoint(EMPTY_POINT);
     }
     try {

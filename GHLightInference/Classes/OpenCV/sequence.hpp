@@ -1,7 +1,7 @@
 #ifndef __SEQUENCE_HPP__
 #define __SEQUENCE_HPP__
 
-#include "common.hpp"
+//#include "common.hpp"
 #include "features.hpp"
 
 using namespace cv;
