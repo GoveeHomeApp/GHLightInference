@@ -444,7 +444,13 @@ extension GHDetectionTool {
                     }
                     
                     GHOpenCVBridge.shareManager().clearAllresLp()
-                    GHOpenCVBridge.shareManager().createLightPointArray(poArr)
+                    switch self.bizType {
+                    case 1:
+                        GHOpenCVBridge.shareManager().createLightPointArray([])
+                    default:
+                        GHOpenCVBridge.shareManager().createLightPointArray(poArr)
+                    }
+                    
                     
                     var resultJsonString = ""
                     for (idx, _) in self.afterImgArray.enumerated() {
@@ -465,19 +471,6 @@ extension GHDetectionTool {
                             self.finalImage = image
                             self.imageView.image = image
                             #if DEBUG
-//                            self.resPointView.backgroundColor = UIColor.white
-//                            for basRes in pt.lightPoints {
-//                                // frame需要转换！！！
-//                                let rectView = UIView(frame: CGRect(x: basRes.x/12, y: basRes.y/8, width: 2, height: 2))
-//                                rectView.backgroundColor = UIColor.green
-//                                self.resPointView.addSubview(rectView)
-//                            }
-//                            for traRes in pt.trapezoidalPoints {
-//                                // frame需要转换！！！
-//                                let rectView = UIView(frame: CGRect(x: traRes.x/12, y: traRes.y/8, width: 2, height: 2))
-//                                rectView.backgroundColor = UIColor.blue
-//                                self.resPointView.addSubview(rectView)
-//                            }
                             self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
