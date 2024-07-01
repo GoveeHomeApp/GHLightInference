@@ -57,7 +57,7 @@ const int output_size_682 = 25200*6;
         }
         
         NSMutableArray* results = [[NSMutableArray alloc] init];
-        if (self.nc == 6) {
+        if (self.nc == 1) {
             for (int i = 0; i < output_size_682; i++) {
                 [results addObject:@(floatBuffer[i])];
             }

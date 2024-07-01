@@ -258,9 +258,10 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 }
             }
         default:
-            colorDict[UIColor.red] = redArr
-            colorDict[UIColor.green] = greenArr
+            break
         }
+        colorDict[UIColor.red] = redArr
+        colorDict[UIColor.green] = greenArr
         let effect = DetectionEffectModel(frameStep: step, colorDict: colorDict)
         return effect
     }
@@ -436,7 +437,7 @@ extension GHDetectionTool {
                         po.lightId = ct
                         poArr.append(po)
                     }
-                    
+                    print("log.f ======== \(poArr.count)")
                     if poArr.count < 5 { // 少于5个 直接认为失败
                         self.doneNotice?(nil)
                         return
