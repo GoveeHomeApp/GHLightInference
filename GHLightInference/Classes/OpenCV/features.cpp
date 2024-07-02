@@ -260,13 +260,6 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
     /*统计得分*/
     int ret = statisticalScorePoints(src, outMats, processor);
 
-    /*删除离群点+构建梯形*/
-    if (lightType == TYPE_H70CX_3D) {
-        Mat trapezoidMat = src.clone();
-        ret = getMinTrapezoid(trapezoidMat, processor.pointXys, trapezoid4Points);
-        outMats.push_back(trapezoidMat);
-    }
-
     if (ret == 0) {
         LOGE(LOG_TAG, "统计得分失败");
         return processor;
@@ -301,6 +294,17 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
     sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
     if (lightType != TYPE_H682X) {
         deleteDiscontinuousPoints(processor);
+        /*删除离群点+构建梯形*/
+        if (lightType == TYPE_H70CX_3D) {
+            Mat trapezoidMat = src.clone();
+            vector<Point2i> point4Trapezoid;
+            for (int i = 0; i < processor.totalPoints.size(); i++) {
+                point4Trapezoid.push_back(processor.totalPoints[i].point2f);
+            }
+            LOGD(LOG_TAG, "point4Trapezoid = %d", point4Trapezoid.size());
+            ret = getMinTrapezoid(trapezoidMat, point4Trapezoid, trapezoid4Points);
+            outMats.push_back(trapezoidMat);
+        }
     } else {
         try {
             int size = processor.totalPoints.size();
@@ -455,7 +459,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
  * 计算点位平均距离
  */
 double calculateAverageDistance(LampBeadsProcessor &processor) {
-    double averageDistance = 20;
+    double averageDistance = 55;
     int averageCnt = 1;
     int diff = 1;
     if (lightType != TYPE_H682X) {
@@ -467,7 +471,7 @@ double calculateAverageDistance(LampBeadsProcessor &processor) {
         int xx = nextLPoint.lightIndex - curLPoint.lightIndex;
         if (xx == diff) {
             averageDistance += norm(nextLPoint.point2f - curLPoint.point2f);
-            averageCnt += 1;
+            averageCnt += 2;
         }
     }
     averageDistance = averageDistance / averageCnt;
@@ -891,8 +895,9 @@ LightPoint inferredCenter(LampBeadsProcessor &processor, LightPoint &A, LightPoi
     }
     int curLightIndex = lastLightIndex + 1;
     LOGD(LOG_TAG,
-         "【Center】推断 %d  cur = %d, last = %d diffX = %f diffY = %f", curLightIndex, A.lightIndex,
-         lastLightIndex, diffSegmentLenX, diffSegmentLenY);
+         "【Center】推断 %d  cur = %d, last = %d diffX = %f diffY = %f  cur(%d x %d)", curLightIndex,
+         A.lightIndex,
+         lastLightIndex, diffSegmentLenX, diffSegmentLenY, A.point2f.x, A.point2f.y);
     int x = B.point2f.x + diffSegmentLenX;
     int y = B.point2f.y + diffSegmentLenY;
 
@@ -1195,6 +1200,8 @@ findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLi
          LampBeadsProcessor &processor) {
     if (inferredLightIndex > getIcNum()) return LightPoint(EMPTY_POINT);
     int sequenceType = getNonSequenceType(inferredLightIndex, lightType);
+    LOGE(LOG_TAG, "findLamp  sequenceType=%d  inferredLightIndex=%d", sequenceType,
+         inferredLightIndex);
     if (sequenceType == -1) {
         LOGE(LOG_TAG, "非推断序号");
         return LightPoint(EMPTY_POINT);
@@ -1203,6 +1210,7 @@ findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLi
                                          sequenceTypeMap[sequenceType], sequenceType);
 
     if (findLp.errorStatus == EMPTY_POINT) {
+        LOGE(LOG_TAG, "从错点中找");
         findLp = findLampInVector(center, minDistance, checkDistance, errorSerialVector, 4);
     }
     if (findLp.errorStatus != EMPTY_POINT) {
@@ -1224,13 +1232,15 @@ LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDista
     }
     try {
         int selectIndex = -1;
-        double distanceTemp = minDistance * 0.45;
+        double distanceTemp = minDistance * 0.6;
         for (int i = 0; i < points.size(); i++) {
             LightPoint itA = points[i];
             int contrastX = itA.point2f.x;
             int contrastY = itA.point2f.y;
             double distance = sqrt((contrastX - center.x) * (contrastX - center.x) +
                                    (contrastY - center.y) * (contrastY - center.y));
+            LOGD(LOG_TAG, "distance = %f  distanceTemp = %f  contrast=%d x %d", distance,
+                 distanceTemp, contrastX, contrastY);
             if (distance < distanceTemp) {
                 distanceTemp = distance;
                 selectIndex = i;
@@ -1241,7 +1251,7 @@ LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDista
         }
         LightPoint selectPoint = points[selectIndex];
         points.erase(points.begin() + selectIndex);
-//    LOGV(LOG_TAG, "points剩余  = %d", points.size());
+        LOGV(LOG_TAG, "points剩余  = %d", points.size());
         return selectPoint;
     } catch (...) {
         LOGE(LOG_TAG, "========》 异常3");

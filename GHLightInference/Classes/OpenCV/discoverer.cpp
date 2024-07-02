@@ -655,12 +655,12 @@ int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &t
 
         double angleSelect = 0;
         if (abs(pointRight.x - mu.m10 / mu.m00) > abs(mu.m10 / mu.m00 - pointLeft.x)) {
-            pointRight.x = pointRight.x + 20;
+            pointRight.x = pointRight.x;
             //取右边点
             int leftX = mu.m10 / mu.m00 - (pointRight.x - mu.m10 / mu.m00);
             pointLeft = Point(leftX, pointRight.y);
         } else {
-            pointLeft.x = pointLeft.x - 20;
+            pointLeft.x = pointLeft.x;
             int rightX = mu.m10 / mu.m00 + (mu.m10 / mu.m00 - pointLeft.x);
             pointRight = Point(rightX, pointLeft.y);
         }
