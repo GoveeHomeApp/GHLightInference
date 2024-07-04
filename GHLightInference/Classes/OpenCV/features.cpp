@@ -117,7 +117,12 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
                 LightPoint curPoint = resultObjects[i];
 //                LOGD(LOG_TAG, "sortStripByStep  %f x %f  center=(%d,%d)", curPoint.with,
 //                     curPoint.height, curPoint.point2f.x, curPoint.point2f.y);
-                pPointXys.push_back(curPoint.point2f);
+                Rect_<int> rect = curPoint.tfRect;
+                Point center = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
+                curPoint.point2f = center;
+                curPoint.with = rect.width;
+                curPoint.height = rect.height;
+                pPointXys.push_back(center);
                 pPoints.push_back(curPoint);
             }
         }
