@@ -5,7 +5,7 @@
 //#include <opencv2/ml.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-
+#include <map>
 /**
  * 查找灯带光点
  */

@@ -1,17 +1,19 @@
-#ifdef __cplusplus
+#pragma once
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/mat.hpp>
-#include <map>
+#include <cmath>
+#include <algorithm>
+#include <unordered_set>
+#include <unordered_map>
+#include "logger.hpp"
 
-#define LOG_TAG "log_detection_"
+#define LOG_TAG "OpenCv"
+#define TAG_INFERRED "OpenCv_Inferred"
+#define TAG_DELETE "OpenCv_Delete"
 
-#define LOGV(TAG, ...) printf(__VA_ARGS__)
-#define LOGD(TAG, ...) printf(__VA_ARGS__)
-#define LOGW(TAG, ...) printf(__VA_ARGS__)
-#define LOGE(TAG, ...) printf(__VA_ARGS__)
+#include <time.h> // clock_gettime
 
-#include <time.h>
-#endif
 
 enum CUS_COLOR_TYPE {
     E_W = 0,
@@ -36,8 +38,8 @@ enum LIGHT_TYPE {
 class LightPoint {
 public:
     cv::Point2i point2f;
-    double with = 7.0;
-    double height = 7.0;
+    double with = 5.0;
+    double height = 5.0;
     int score = -1;
     double brightness = -1;
     int lightIndex = -1;
@@ -46,6 +48,8 @@ public:
     float tfScore = 0;
     cv::Rect tfRect;
     cv::RotatedRect rotatedRect;
+    std::vector<int> neighbors;
+    float localDensity;  // 新增：局部密度
 public:
     ~LightPoint() {
         // 析构函数，释放资源
@@ -113,6 +117,6 @@ public:
     // 重载==运算符以支持比较
     bool operator==(const LightPoint &other) const {
         return lightIndex == other.lightIndex && point2f.x == other.point2f.x &&
-               point2f.y == other.point2f.y;
+                point2f.y == other.point2f.y;
     }
 };

@@ -3,7 +3,7 @@
 
 //#include "common.hpp"
 #include "discoverer.hpp"
-
+#include <map>
 using namespace cv;
 using namespace std;
 
@@ -136,7 +136,7 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src);
 /**
  * 从红绿固定点和错点中推测点位
  */
-void decisionRightLeftPoints(LampBeadsProcessor &processor);
+void decisionRightLeftPoints(vector<LightPoint> &totalPoints) ;
 
 /**处理剩余无序点位*/
 void decisionRemainingPoints(LampBeadsProcessor &processor);
@@ -152,15 +152,14 @@ string splicedJson(string a, string b);
 
 bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C);
 
-LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, LampBeadsProcessor &processor);
+LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, bool findErrorPoints);
 
 bool compareIndex(const LightPoint &p1, const LightPoint &p2);
 
 /**
  * 找出最可能点位
  */
-LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
-                    LampBeadsProcessor &processor);
+LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,bool findErrorPoints);
 
 /**
  * 从集合中查找点位
@@ -173,20 +172,20 @@ LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDista
  */
 LightPoint inferredRight(LightPoint &curLPoint,
                          LightPoint &lastLPoint,
-                         LightPoint &nextLPoint, int i, LampBeadsProcessor &processor);
+                         LightPoint &nextLPoint, int i, vector<LightPoint> &totalPoints, bool findErrorPoints);
 
 /**
  * 根据水平方向推断左边点
  */
 LightPoint inferredLeft(LightPoint &curLPoint,
                         LightPoint &lastLPoint,
-                        LightPoint &nextLPoint, int i, LampBeadsProcessor &processor);
-
+                        LightPoint &nextLPoint, int i, vector<LightPoint> &totalPoints,
+                        bool findErrorPoints);
 /**
  * 推测中间点
  * @param A 后一个点
  * @param B 前一个点
  */
-LightPoint inferredCenter(LampBeadsProcessor &processor, LightPoint &A, LightPoint &B);
-
+LightPoint
+inferredCenter(int avgDistance, LightPoint &A, LightPoint &B, bool findErrorPoints);
 #endif
