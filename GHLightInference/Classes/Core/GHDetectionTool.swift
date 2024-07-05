@@ -66,7 +66,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     private var prepostProcessor: PrePostProcessor?
     // DEBUG专用
     public var imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 640, height: 640))
-    public var saveImageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 960, height: 1280))
+    public var saveImageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 1280, height: 960))
     public var resPointView = UIView(frame: CGRect(x: 0, y: 0, width: 160, height: 160))
     public var detectionImage: UIImage?
     public var finalImage: UIImage?
