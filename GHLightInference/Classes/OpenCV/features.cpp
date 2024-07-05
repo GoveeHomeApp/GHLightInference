@@ -335,6 +335,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
     }
     //处理剩余无序点位
     decisionRemainingPoints(processor);
+    LOGD(LOG_TAG, "point4Trapezoid lightType= %d", lightType);
     if (lightType != TYPE_H682X) {
         /*删除离群点+构建梯形*/
         if (lightType == TYPE_H70CX_3D) {
@@ -345,6 +346,9 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
             }
             LOGD(LOG_TAG, "point4Trapezoid = %d", point4Trapezoid.size());
             ret = getMinTrapezoid(trapezoidMat, point4Trapezoid, trapezoid4Points);
+            if (ret != 1) {
+                LOGE(LOG_TAG, "构建梯形异常");
+            }
             outMats.push_back(trapezoidMat);
         }
     } else {
@@ -571,7 +575,7 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
         }
 
         LightPoint centerP = inferredCenter(processor.averageDistance, normalPoint, lastPoint,
-                                            false);
+                                            true);
         if (centerP.errorStatus != EMPTY_POINT && centerP.lightIndex < getIcNum() &&
             centerP.lightIndex >= 0)
             processor.totalPoints.push_back(centerP);
@@ -601,7 +605,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                 //第一个点
                 if (it->lightIndex > 1 && enable4BeginLeft) {
                     LOGD(LOG_TAG, "第1个点之前缺失，begin : %d", it->lightIndex);
-                    LightPoint inferredPoint = inferredAB2Next(nextLPoint, curLPoint, false);
+                    LightPoint inferredPoint = inferredAB2Next(nextLPoint, curLPoint, true);
                     if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
                         inferredPoint.lightIndex < getIcNum()) {
                         totalPoints.insert(totalPoints.begin(),
@@ -623,7 +627,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                     if (abcHorizontal) {
                         while (inferredNextDiff > 1) {
                             LightPoint inferredPoint = inferredAB2Next(nextNextLPoint, nextLPoint,
-                                                                       false);
+                                                                       true);
                             if (inferredPoint.errorStatus != EMPTY_POINT &&
                                 inferredPoint.lightIndex >= 0 &&
                                 inferredPoint.lightIndex < getIcNum()) {
@@ -662,7 +666,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                     if (inferred2Right) {
                         //首先往右边推断
                         inferredPoint = inferredRight(curLPoint, lastLPoint, nextLPoint, i,
-                                                      totalPoints, false);
+                                                      totalPoints, true);
                         if (inferredPoint.errorStatus != EMPTY_POINT &&
                             inferredPoint.lightIndex >= 0 &&
                             inferredPoint.lightIndex < getIcNum()) {
@@ -695,7 +699,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                              nextLPoint.lightIndex);
 
                         inferredPoint = inferredLeft(curLPoint, lastLPoint, nextLPoint, index,
-                                                     totalPoints, false);
+                                                     totalPoints, true);
                         if (inferredPoint.errorStatus != EMPTY_POINT) {
                             lastLPoint = curLPoint;
                             curLPoint = inferredPoint;
@@ -793,7 +797,7 @@ void decisionRemainingPoints(LampBeadsProcessor &processor) {
             LOGD(LOG_TAG,
                  "【补点-X】= %d", curLPoint.lightIndex + 1);
             LightPoint inferredPoint = findLamp(curLPoint.point2f,
-                                                processor.averageDistance / 0.7, false,
+                                                processor.averageDistance / 0.45, false,
                                                 curLPoint.lightIndex + 1, true);
 
             if (inferredPoint.errorStatus != EMPTY_POINT) {
@@ -1245,7 +1249,7 @@ findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLi
  * 判断点pointB是否在AC中间
  */
 bool isPointInCenter(const Point2f &pointA, const Point2f &pointC,
-                     const Point2f &point, float x, float tolerance = 5.0f) {
+                     const Point2f &point, float x, float tolerance = 15.0f) {
     // 计算AC、AP、CP的距离
     float distAC = norm(pointA - pointC);
     float distAP = norm(pointA - point);

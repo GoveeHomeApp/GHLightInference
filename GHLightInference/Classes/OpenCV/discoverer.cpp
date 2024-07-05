@@ -612,8 +612,8 @@ int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &t
         line(image, Point2i(mu.m10 / mu.m00, 0), Point2i(mu.m10 / mu.m00, image.rows),
              Scalar(255, 255, 255), 2);
 
-        double averageSlope = 74;
-        LOGD(LOG_TAG, "均值斜率：%f", averageSlope);
+        double averageSlope = 77;
+
         //计算最接近均值斜率的斜线
         double closestAngleRight;
         double closestAngleLeft;
@@ -655,20 +655,23 @@ int getMinTrapezoid(Mat &image, const vector<Point> &pointsSrc, vector<Point> &t
 
         double angleSelect = 0;
         if (abs(pointRight.x - mu.m10 / mu.m00) > abs(mu.m10 / mu.m00 - pointLeft.x)) {
-            pointRight.x = pointRight.x;
+            pointRight.x = pointRight.x + 5;
             //取右边点
             int leftX = mu.m10 / mu.m00 - (pointRight.x - mu.m10 / mu.m00);
             pointLeft = Point(leftX, pointRight.y);
         } else {
-            pointLeft.x = pointLeft.x;
+            pointLeft.x = pointLeft.x - 5;
             int rightX = mu.m10 / mu.m00 + (mu.m10 / mu.m00 - pointLeft.x);
             pointRight = Point(rightX, pointLeft.y);
         }
-        if (abs(closestAngleRight) < abs(closestAngleLeft)) {
+        if (abs(closestAngleRight) > abs(closestAngleLeft)) {
             angleSelect = abs(closestAngleRight);
         } else {
             angleSelect = abs(closestAngleLeft);
         }
+
+        LOGD(LOG_TAG, "均值斜率：%f", averageSlope);
+
         if (angleSelect <= 5) {
             LOGE(LOG_TAG, "左右均无有效斜边");
             return 0;
