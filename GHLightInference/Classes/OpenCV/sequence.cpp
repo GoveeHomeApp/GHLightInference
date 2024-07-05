@@ -243,7 +243,7 @@ vector<vector<int>> getColors(int frameStep) {
                     colorMap.push_back({index, numbers[colorIndex]});
                 }
                 cntEvenIndex++;
-                if (cntEvenIndex == 4) {
+                if (cntEvenIndex == 5) {
                     cntEvenIndex = 0;
                 }
             }
@@ -256,6 +256,9 @@ vector<vector<int>> getColors(int frameStep) {
  *
  * @param index  0 红色 1 绿色  2 sizeMax  3 sizeMax-1
  * @return
+ *
+我有0-600个数，从1开始后所有的奇数，分别指定标记为a、b、c、d ,依次顺序分配标记，比如1标记a,3标记b,5标记c,7标记d,9标记a,11标记a等依次下去。现在随机输入一个0-600范围的奇数x，求他的标记
+
  */
 int getNonSequenceType(int inferredLightIndex, int lightType) {
     try {
@@ -267,7 +270,13 @@ int getNonSequenceType(int inferredLightIndex, int lightType) {
             }
             return greenRet;
         } else {
-            return ((inferredLightIndex + 1) / 2 - 1) % 4;
+            if (inferredLightIndex % 2 == 0 || inferredLightIndex < 1) {
+                LOGE(LOG_TAG, "getNonSequenceType 无效输入");
+                return -1; // 无效输入
+            }
+            //labels[]
+            return ((inferredLightIndex + 1) / 2 - 1) % 5;
+//            return ((inferredLightIndex + 1) / 2 - 1) % 4;
         }
     } catch (...) {
         LOGE(LOG_TAG, "getNonSequenceType error");

@@ -53,7 +53,7 @@ public:
     float localDensity;  // 新增：局部密度
     cv::Point startPoint;  //
     cv::Point endPoint;  //
-    bool isInterpolate=false;  //
+    bool isInterpolate=false;
 public:
     ~LightPoint() {
         // 析构函数，释放资源

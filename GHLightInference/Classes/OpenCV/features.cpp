@@ -1,6 +1,7 @@
 #include "features.hpp"
 #include "sequence.hpp"
 #include "anomaly.cpp"
+#include "select.hpp"
 #include "interpolate682x.hpp"
 #include <opencv2/opencv.hpp>
 #include <iostream>
@@ -276,8 +277,6 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
         LOGE(LOG_TAG, "统计得分失败");
         return processor;
     }
-    /*处理分值相同的点*/
-    decideSameScorePoint(processor, src, outMats);
 
     if (processor.normalPoints.empty())return processor;
 
@@ -290,6 +289,10 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
     decisionCenterPoints(processor, src);
 
     if (processor.totalPoints.size() < 4 && lightType != TYPE_H682X)return processor;
+
+    /*处理分值相同的点*/
+    processSamePoints(src, outMats, processor.totalPoints, errorSerialVector, averageDistance,
+                      processor.sameSerialNumMap);
 
     if (processor.totalPoints.size() > 2) {
         //对补全的点进行排序
@@ -386,9 +389,6 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
             LOGE(LOG_TAG, "异常装10");
         }
         int size = processor.totalPoints.size();
-//        int fixH = 16 * getIcNum();
-//        processor.totalPoints = interpolateRotatedRects(processor.totalPoints, getIcNum() - 1, 16,
-//                                                        fixH, src);
 
         int totalCount = getIcNum(); // 期望的总矩形数
         float targetWidth = 16;
@@ -415,7 +415,6 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
     int scoreMax = processor.scoreMax;
     int maxFrameStep = processor.maxFrameStep;
     vector<int> sameColorScore = getSameColorVector();
-
     Mat out = src.clone();
     //消除
     vector<int> eraseVector = polyPoints(pPointXys, 3, 2.3, out);
@@ -426,7 +425,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
         erasePoint->errorStatus = ERASE_POINT;
     }
     sequenceTypeMap.clear();
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         sequenceTypeMap[i] = vector<LightPoint>();
     }
     // 1. 统计分值相同的index
@@ -480,6 +479,10 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
             sequenceTypeMap[3].push_back(pPoints[i]);
             continue;
         }
+        if (score == (getScoreMax() - 3) && lightType != TYPE_H682X) {
+            sequenceTypeMap[4].push_back(pPoints[i]);
+            continue;
+        }
         pPoints[i].score = score;
         //计算序列
         syncLightIndex(pPoints[i], score, lightType);
@@ -492,20 +495,31 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
             //70dx的序列是奇数点位，不满足的话就是推错点了
             errorSerialVector.push_back(pPoints[i]);
         } else {
-            if (processor.sameSerialNumMap[pPoints[i].lightIndex].empty()) {
-                processor.normalPoints.push_back(pPoints[i]);
-            }
-            processor.sameSerialNumMap[pPoints[i].lightIndex].push_back(normalIndex);
+            processor.sameSerialNumMap[pPoints[i].lightIndex].push_back(pPoints[i]);
             normalIndex++;
         }
     }
-
+    int samePointsSize = 0;
+    for (const auto &entry: processor.sameSerialNumMap) {
+        const vector<LightPoint> &indices = entry.second;
+        if (indices.size() == 1) {
+            processor.normalPoints.push_back(indices[0]);
+        } else {
+            samePointsSize++;
+        }
+    }
     LOGW(LOG_TAG,
-         "redSameVector = %d  greenSameVector = %d   max = %d   max2 = %d   errorSerialVector = %d",
+         "normalPoints = %d  samePoints = %d  redSameVector = %d  greenSameVector = %d   max = %d   max2 = %d   max3 = %d   errorSerialVector = %d",
+         processor.normalPoints.size(),
+         samePointsSize,
          sequenceTypeMap[0].size(),
          sequenceTypeMap[1].size(),
          sequenceTypeMap[2].size(),
-         sequenceTypeMap[3].size(), errorSerialVector.size());
+         sequenceTypeMap[3].size(),
+         sequenceTypeMap[4].size(),
+         errorSerialVector.size()
+    );
+
     return 1;
 }
 
@@ -804,39 +818,6 @@ void decisionRemainingPoints(LampBeadsProcessor &processor) {
         // 按照y值从小到大排序
         sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
     }
-}
-
-/**
- * 处理同色得分点
- */
-void
-decideSameScorePoint(LampBeadsProcessor &processor, Mat &src, vector<Mat> &outMats) {
-    Mat samePoint = src.clone();
-    LOGV(LOG_TAG, "处理同色得分点");
-    if (processor.sameSerialNumMap.empty())return;
-    /*
-     * 1. 计算可信度最高的点
-     */
-    for (auto it = processor.sameSerialNumMap.begin();
-         it != processor.sameSerialNumMap.end(); it++) {
-        int serialNum = it->first;
-        vector<int> sameScoreIndexVector = it->second;
-        if (sameScoreIndexVector.size() > 1) {
-
-            LOGD(LOG_TAG, "[处理同序列] 序号 = %d, 同分个数 = %d", serialNum,
-                 sameScoreIndexVector.size());
-
-            for (int index: sameScoreIndexVector) {
-                LightPoint lp = pPoints[index];
-                circle(samePoint, lp.point2f, 8, Scalar(0, 255, 255), 2);
-                putText(samePoint, to_string(serialNum), lp.point2f,
-                        FONT_HERSHEY_SIMPLEX, 0.8,
-                        Scalar(0, 255, 255), 1);
-            }
-
-        }
-    }
-    outMats.push_back(samePoint);
 }
 
 LightPoint inferredRight(LightPoint &curLPoint,
@@ -1317,7 +1298,7 @@ LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDista
     }
     try {
         int selectIndex = -1;
-        double distanceTemp = minDistance * 0.6;
+        double distanceTemp = minDistance * 0.7;
         for (int i = 0; i < points.size(); i++) {
             LightPoint itA = points[i];
             int contrastX = itA.point2f.x;

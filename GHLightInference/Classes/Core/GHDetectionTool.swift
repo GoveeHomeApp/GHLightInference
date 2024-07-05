@@ -66,6 +66,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     private var prepostProcessor: PrePostProcessor?
     // DEBUG专用
     public var imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 640, height: 640))
+    public var saveImageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 960, height: 1280))
     public var resPointView = UIView(frame: CGRect(x: 0, y: 0, width: 160, height: 160))
     public var detectionImage: UIImage?
     public var finalImage: UIImage?
@@ -188,7 +189,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             if let _ = self.transaction { //正常transaction
                 var second = 0.5
                 if step == 0 {
-                    second = 2 // 第一帧延时取
+                    second = 1 // 第一帧延时取
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + second) {
                     self.captureOneFrame()
@@ -207,7 +208,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                         self.alignmentAll { [weak self] in
                             guard let `self` = self else { return }
                             self.imageView.image = self.afterImgArray.first
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 self.runDetection()
                             }
                         }
@@ -285,8 +286,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer),let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
                 self.preImageArray.append(scaleImage)
                 #if DEBUG
-                self.imageView.image = scaleImage
-                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+                self.saveImageView.image = scaleImage
+                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                 #endif
                 DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
                     self.capFinishHandler?()

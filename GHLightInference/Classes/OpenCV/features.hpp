@@ -18,14 +18,6 @@ public:
     int averageDistance;
 
     /**
-     * 同色得分点
-     * key:得分
-     * value：index集合
-     */
-    map<int, vector<int>> sameSerialNumMap;
-
-
-    /**
      * 坐标集合
      */
     vector<Point2i> pointXys;
@@ -34,6 +26,7 @@ public:
      * 正常序列点位
      */
     vector<LightPoint> normalPoints;
+    map<int, vector<LightPoint>> sameSerialNumMap;
     /**
       * 所有点位集合
       */
@@ -115,12 +108,6 @@ bool compareScore(const LightPoint &p1, const LightPoint &p2);
  */
 string lightPointsToJson(const vector<LightPoint> &points);
 
-/**
- * 处理同色得分点
- * @param samePoints
- */
-void
-decideSameScorePoint(LampBeadsProcessor &processor, Mat &src, vector<Mat> &outMats);
 
 /**
  * 计算点位平均距离
