@@ -319,8 +319,9 @@ extension GHDetectionTool {
                 ic = 20
             default: break
             }
-            self.bizType = 1
+            self.bizType = 2
         }
+        print("log.f ====== dimension \(self.dimension)")
         prepostProcessor = GHLightDetectManager.instance.prepostProcessor(config: cf)
         self.inferencer.sku = sku
         self.inferencer.dimension = self.dimension
@@ -445,7 +446,7 @@ extension GHDetectionTool {
                     
                     GHOpenCVBridge.shareManager().clearAllresLp()
                     switch self.bizType {
-                    case 1:
+                    case 2:
                         GHOpenCVBridge.shareManager().createLightPointArray([])
                     default:
                         GHOpenCVBridge.shareManager().createLightPointArray(poArr)

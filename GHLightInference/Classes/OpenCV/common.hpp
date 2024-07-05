@@ -11,6 +11,7 @@
 #define LOG_TAG "OpenCv"
 #define TAG_INFERRED "OpenCv_Inferred"
 #define TAG_DELETE "OpenCv_Delete"
+#define TAG_ADD "OpenCv_Add"
 
 #include <time.h> // clock_gettime
 
@@ -50,6 +51,9 @@ public:
     cv::RotatedRect rotatedRect;
     std::vector<int> neighbors;
     float localDensity;  // 新增：局部密度
+    cv::Point startPoint;  //
+    cv::Point endPoint;  //
+    bool isInterpolate=false;  //
 public:
     ~LightPoint() {
         // 析构函数，释放资源

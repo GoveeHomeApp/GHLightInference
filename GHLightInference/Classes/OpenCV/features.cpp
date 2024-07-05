@@ -1,6 +1,7 @@
 #include "features.hpp"
 #include "sequence.hpp"
 #include "anomaly.cpp"
+#include "interpolate682x.hpp"
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <opencv2/imgproc/types_c.h>
@@ -185,14 +186,6 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
         for (int i = 0; i < pPoints.size(); i++) {
             LightPoint lpoint = pPoints[i];
             if (!lpoint.rotatedRect.size.empty()) {
-                Point2f vertices[4];
-                // 获取旋转矩形的四个顶点
-                lpoint.rotatedRect.points(vertices);
-                // 绘制旋转矩形
-                for (int j = 0; j < 4; ++j) {
-                    cv::line(dstCircle, vertices[j], vertices[(j + 1) % 4],
-                             cv::Scalar(0, 255, 0), 2);
-                }
             } else {
                 Rect roi;
                 pPoints[i].buildRect(src, roi);
@@ -203,7 +196,6 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
                 }
             }
         }
-
         for (int i = 0; i < processor.totalPoints.size(); i++) {
             LightPoint lpoint = processor.totalPoints[i];
             Point2f center = lpoint.point2f;
@@ -216,20 +208,36 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
                 lpoint.rotatedRect.points(vertices);
                 // 绘制旋转矩形
                 for (int j = 0; j < 4; ++j) {
-                    cv::line(dstCircle, vertices[j], vertices[(j + 1) % 4],
-                             cv::Scalar(0, 255, 0), 2);
+                    if (processor.totalPoints[i].isInterpolate) {
+                        cv::line(dstCircle, vertices[j], vertices[(j + 1) % 4],
+                                 cv::Scalar(255, 0, 255, 170), 1);
+                    } else {
+                        cv::line(dstCircle, vertices[j], vertices[(j + 1) % 4],
+                                 cv::Scalar(0, 255, 0), 1);
+                    }
                 }
+                circle(dstCircle, processor.totalPoints[i].startPoint, 3, Scalar(255, 255, 0), 3);
+                circle(dstCircle, processor.totalPoints[i].endPoint, 3, Scalar(255, 255, 255), 3);
+                LOGD(LOG_TAG, "draw lightIndex = %d ", lpoint.lightIndex);
             } else {
                 Rect roi;
                 pPoints[i].buildRect(src, roi);
                 rectangle(dstCircle, roi, Scalar(0, 255, 255, 150), 2);
             }
             if (lightType == TYPE_H682X) {
-                putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
-                        FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        Scalar(255, 0, 0),
-                        1);
+                if (processor.totalPoints[i].isInterpolate) {
+                    putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
+                            FONT_HERSHEY_SIMPLEX,
+                            1,
+                            Scalar(0, 255, 255),
+                            2);
+                } else {
+                    putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
+                            FONT_HERSHEY_SIMPLEX,
+                            1,
+                            Scalar(0, 0, 255),
+                            2);
+                }
             } else {
                 putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
                         FONT_HERSHEY_SIMPLEX,
@@ -281,56 +289,50 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
     /*推测中间夹点*/
     decisionCenterPoints(processor, src);
 
-    if (processor.totalPoints.size() < 4)return processor;
+    if (processor.totalPoints.size() < 4 && lightType != TYPE_H682X)return processor;
 
-    //对补全的点进行排序
-    sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
+    if (processor.totalPoints.size() > 2) {
+        //对补全的点进行排序
+        sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
 
-    decisionRightLeftPoints(processor.totalPoints);
+        decisionRightLeftPoints(processor.totalPoints);
 
-    //对补全的点进行排序
-    sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
+        //对补全的点进行排序
+        sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
 
-    float distanceThreshold = 5.0f;  // 距离阈值系数
-    int labelDiffThreshold = 25;   // 允许的最大标签差
-    if (getIcNum() == 500) {
-        labelDiffThreshold = 25;
-    } else if (getIcNum() == 200) {
-        labelDiffThreshold = 35;
-    }
-    int densityNeighbors = 20;  // 用于计算密度的邻居数
-    AnomalyDetector detector(processor.totalPoints, processor.averageDistance, distanceThreshold,
-                             labelDiffThreshold, getIcNum(), densityNeighbors);
-    vector<int> anomalies = detector.detectAnomalies();
-    LOGE(TAG_DELETE, "errorPoints=%d", anomalies.size());
-
-    for (int i = 0; i < anomalies.size(); i++) {
-        LightPoint errorPoint = processor.totalPoints[anomalies[i]];
-        LOGE(TAG_DELETE,
-             "errorPoints index = %d  errorPoint = %d x %d",
-             errorPoint.lightIndex, errorPoint.point2f.x, errorPoint.point2f.y);
-    }
-    for (int i = anomalies.size() - 1; i >= 0; i--) {
-        int pointIndex = anomalies[i];
-        if (pointIndex >= processor.totalPoints.size() || pointIndex < 0) {
-            LOGE(TAG_DELETE, "擦除脏数据失败");
-            continue;
+        if (lightType != TYPE_H682X) {
+            float distanceThreshold = 5.0f;  // 距离阈值系数
+            int labelDiffThreshold = 25;   // 允许的最大标签差
+            if (getIcNum() == 500) {
+                labelDiffThreshold = 25;
+            } else if (getIcNum() == 200) {
+                labelDiffThreshold = 35;
+            }
+            int densityNeighbors = 20;  // 用于计算密度的邻居数
+            AnomalyDetector detector(processor.totalPoints, processor.averageDistance,
+                                     distanceThreshold,
+                                     labelDiffThreshold, getIcNum(), densityNeighbors);
+            vector<int> anomalies = detector.detectAnomalies();
+            LOGE(TAG_DELETE, "errorPoints=%d", anomalies.size());
+            for (int i = anomalies.size() - 1; i >= 0; i--) {
+                int pointIndex = anomalies[i];
+                if (pointIndex >= processor.totalPoints.size() || pointIndex < 0) {
+                    LOGE(TAG_DELETE, "擦除脏数据失败");
+                    continue;
+                }
+                LOGD(TAG_DELETE, "erase index=%d, lightIndex=%d  errorPoint = %d x %d",
+                     anomalies[i],
+                     processor.totalPoints[anomalies[i]].lightIndex,
+                     processor.totalPoints[anomalies[i]].point2f.x,
+                     processor.totalPoints[anomalies[i]].point2f.y);
+                processor.totalPoints.erase(processor.totalPoints.begin() + anomalies[i]);
+            }
         }
-        LOGD(TAG_DELETE, "erase index=%d, lightIndex=%d  errorPoint = %d x %d",
-             anomalies[i],
-             processor.totalPoints[anomalies[i]].lightIndex,
-             processor.totalPoints[anomalies[i]].point2f.x,
-             processor.totalPoints[anomalies[i]].point2f.y);
-        processor.totalPoints.erase(processor.totalPoints.begin() + anomalies[i]);
-    }
 
+    }
     //处理剩余无序点位
     decisionRemainingPoints(processor);
-
-    // 按照y值从小到大排序
-    sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
     if (lightType != TYPE_H682X) {
-//        deleteDiscontinuousPoints(processor);
         /*删除离群点+构建梯形*/
         if (lightType == TYPE_H70CX_3D) {
             Mat trapezoidMat = src.clone();
@@ -383,6 +385,21 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
         } catch (...) {
             LOGE(LOG_TAG, "异常装10");
         }
+        int size = processor.totalPoints.size();
+//        int fixH = 16 * getIcNum();
+//        processor.totalPoints = interpolateRotatedRects(processor.totalPoints, getIcNum() - 1, 16,
+//                                                        fixH, src);
+
+        int totalCount = getIcNum(); // 期望的总矩形数
+        float targetWidth = 16;
+        float targetHeight = 16 * getIcNum();
+        cv::Size imageSize(src.rows, src.cols);
+
+        processor.totalPoints = completeRects(processor.totalPoints, totalCount, targetWidth,
+                                              targetHeight, imageSize);
+
+        LOGD(LOG_TAG, "h682x推断条数 size= %d add = %d ", size,
+             processor.totalPoints.size() - size);
     }
 
     drawPointsMatOut(src, processor, outMats);
@@ -783,6 +800,10 @@ void decisionRemainingPoints(LampBeadsProcessor &processor) {
         }
     }
     LOGE(LOG_TAG, "处理剩余无序点位 补充:  %d", processor.totalPoints.size() - size);
+    if (processor.totalPoints.size() > 2) {
+        // 按照y值从小到大排序
+        sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
+    }
 }
 
 /**
@@ -1158,6 +1179,10 @@ string lightPointsToJson(const vector<LightPoint> &points) {
         ss << "{";
         ss << "\"x\": " << points[i].point2f.x << ", ";
         ss << "\"y\": " << points[i].point2f.y << ", ";
+        ss << "\"startX\": " << points[i].startPoint.x << ", ";
+        ss << "\"startY\": " << points[i].startPoint.y << ", ";
+        ss << "\"endX\": " << points[i].endPoint.x << ", ";
+        ss << "\"endY\": " << points[i].endPoint.y << ", ";
         ss << "\"index\": " << points[i].lightIndex << ", ";
         ss << "\"tfScore\": " << points[i].tfScore;
         ss << "}";

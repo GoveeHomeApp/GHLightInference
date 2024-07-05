@@ -1,5 +1,5 @@
 #include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
+//#include <opencv2/core/ocl.hpp>
 #include <vector>
 #include <algorithm>
 #include <iostream>
@@ -13,11 +13,11 @@ private:
     std::vector<double> scaleFactors;
     bool useOpenCL;
 
-    cv::Mat alignSingleImage(const cv::Mat& image) {
+    cv::Mat alignSingleImage(const cv::Mat &image) {
         cv::Mat currentAligned = image.clone();
         cv::Mat warp_matrix = cv::Mat::eye(2, 3, CV_32F);
 
-        for (double scale : scaleFactors) {
+        for (double scale: scaleFactors) {
             cv::Mat small_image, small_reference;
             cv::resize(currentAligned, small_image, cv::Size(), scale, scale, cv::INTER_LINEAR);
             cv::resize(referenceImage, small_reference, cv::Size(), scale, scale, cv::INTER_LINEAR);
@@ -30,7 +30,7 @@ private:
                                       maxIterations, terminationEps);
 
             try {
-//                if (useOpenCL) {
+                if (useOpenCL) {
 //                    cv::UMat gray_image_umat = gray_image.getUMat(cv::ACCESS_RW);
 //                    cv::UMat gray_reference_umat = gray_reference.getUMat(cv::ACCESS_RW);
 //                    cv::UMat warp_matrix_umat = warp_matrix.getUMat(cv::ACCESS_RW);
@@ -39,18 +39,19 @@ private:
 //                                         cv::MOTION_AFFINE, criteria);
 //
 //                    warp_matrix_umat.copyTo(warp_matrix);
-//                } else {
+                } else {
+                    cv::findTransformECC(gray_reference, gray_image, warp_matrix,
+                                         cv::MOTION_AFFINE, criteria);
+                }
 
-//                }
-                cv::findTransformECC(gray_reference, gray_image, warp_matrix,
-                                     cv::MOTION_AFFINE, criteria);
                 warp_matrix.at<float>(0, 2) /= scale;
                 warp_matrix.at<float>(1, 2) /= scale;
 
                 cv::warpAffine(currentAligned, currentAligned, warp_matrix, currentAligned.size(),
                                cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-            } catch (cv::Exception& e) {
-                std::cerr << "ECC alignment failed at scale " << scale << ": " << e.what() << std::endl;
+            } catch (cv::Exception &e) {
+                std::cerr << "ECC alignment failed at scale " << scale << ": " << e.what()
+                          << std::endl;
                 // Continue to the next scale
             }
         }
@@ -58,7 +59,7 @@ private:
         return currentAligned;
     }
 
-    double assessAlignmentQuality(const cv::Mat& aligned, const cv::Mat& reference) {
+    double assessAlignmentQuality(const cv::Mat &aligned, const cv::Mat &reference) {
         cv::Mat grayAligned, grayReference;
         cv::cvtColor(aligned, grayAligned, cv::COLOR_BGR2GRAY);
         cv::cvtColor(reference, grayReference, cv::COLOR_BGR2GRAY);
@@ -73,7 +74,6 @@ public:
             : maxIterations(maxIter), terminationEps(termEps) {
         scaleFactors = {0.25, 0.5, 0.75, 1.0};  // Multi-scale approach
         useOpenCL = false;
-        // MARK: iOS中不存在OpenCL
 //        if (useOpenCL) {
 //            cv::ocl::setUseOpenCL(true);
 //            std::cout << "OpenCL is available. Using GPU acceleration." << std::endl;
@@ -82,11 +82,11 @@ public:
 //        }
     }
 
-    void addImage(const cv::Mat& image) {
+    void addImage(const cv::Mat &image) {
         images.push_back(image);
     }
 
-    void setReferenceImage(const cv::Mat& refImage) {
+    void setReferenceImage(const cv::Mat &refImage) {
         referenceImage = refImage;
     }
 
@@ -94,7 +94,7 @@ public:
         std::vector<cv::Mat> alignedImages;
         std::vector<double> qualities;
 
-        for (const auto& img : images) {
+        for (const auto &img: images) {
             cv::Mat aligned = alignSingleImage(img);
             double quality = assessAlignmentQuality(aligned, referenceImage);
             alignedImages.push_back(aligned);

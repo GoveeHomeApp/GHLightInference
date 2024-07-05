@@ -1,13 +1,4 @@
-#include <opencv2/opencv.hpp>
-#include <vector>
-#include <unordered_map>
-#include <algorithm>
-#include "common.hpp"
-#include <thread>
-#include <future>
-
-using namespace cv;
-using namespace std;
+#include "anomaly.hpp"
 
 /**
  * Created by linpeng on 2024/7/3.
@@ -87,7 +78,10 @@ private:
             int adjustedThreshold = max(baseLabelDiffThreshold,
                                         min(static_cast<int>(ceil(points[i].localDensity)),
                                             maxLabel / 10));
-            for (const auto &[dist, j]: kdTree[i]) {
+            for (const auto &pair : kdTree[i]) {
+                double dist = pair.first;
+                int j = pair.second;
+                // 使用dist和j
                 if (abs(points[i].lightIndex - points[j].lightIndex) <= adjustedThreshold) {
                     points[i].neighbors.push_back(j);
                 }

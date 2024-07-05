@@ -136,7 +136,7 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src);
 /**
  * 从红绿固定点和错点中推测点位
  */
-void decisionRightLeftPoints(vector<LightPoint> &totalPoints) ;
+void decisionRightLeftPoints(vector<LightPoint> &totalPoints);
 
 /**处理剩余无序点位*/
 void decisionRemainingPoints(LampBeadsProcessor &processor);
@@ -159,7 +159,8 @@ bool compareIndex(const LightPoint &p1, const LightPoint &p2);
 /**
  * 找出最可能点位
  */
-LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,bool findErrorPoints);
+LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
+                    bool findErrorPoints);
 
 /**
  * 从集合中查找点位
@@ -172,7 +173,8 @@ LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDista
  */
 LightPoint inferredRight(LightPoint &curLPoint,
                          LightPoint &lastLPoint,
-                         LightPoint &nextLPoint, int i, vector<LightPoint> &totalPoints, bool findErrorPoints);
+                         LightPoint &nextLPoint, int i, vector<LightPoint> &totalPoints,
+                         bool findErrorPoints);
 
 /**
  * 根据水平方向推断左边点
