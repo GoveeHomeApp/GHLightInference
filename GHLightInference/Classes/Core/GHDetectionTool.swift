@@ -321,6 +321,8 @@ extension GHDetectionTool {
             default: break
             }
             self.bizType = 2
+        } else if sku.hasPrefix("H70C") || sku.hasPrefix("H80C") {
+            self.bizType = self.dimension == "3D" ? 0 : 1
         }
         print("log.f ====== dimension \(self.dimension)")
         prepostProcessor = GHLightDetectManager.instance.prepostProcessor(config: cf)
