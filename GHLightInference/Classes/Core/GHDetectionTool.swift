@@ -287,7 +287,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 self.preImageArray.append(scaleImage)
                 #if DEBUG
                 self.saveImageView.image = scaleImage
-                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
+//                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                 #endif
                 DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
                     self.capFinishHandler?()
@@ -360,7 +360,7 @@ extension GHDetectionTool {
             let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
             #if DEBUG
             self.imageView.image = resImage
-            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+//            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
             #endif
             self.afterImgArray.append(resImage)
         }
