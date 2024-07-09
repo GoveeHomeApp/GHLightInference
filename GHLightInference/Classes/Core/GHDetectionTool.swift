@@ -240,7 +240,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         var greenArr = greenArray
         var colorDict: [UIColor: [Int]] = [:]
         switch self.bizType {
-        case 1:
+        case 2:
             redArr = []
             greenArr = []
             // H6820/1 处理颜色数组
