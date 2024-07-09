@@ -442,16 +442,16 @@ extension GHDetectionTool {
                         poArr.append(po)
                     }
                     print("log.f ======== \(poArr.count)")
-                    if poArr.count < 5 { // 少于5个 直接认为失败
-                        self.doneNotice?(nil)
-                        return
-                    }
-                    
                     GHOpenCVBridge.shareManager().clearAllresLp()
                     switch self.bizType {
                     case 2:
+                        // 6820系列直接走CV识别
                         GHOpenCVBridge.shareManager().createLightPointArray([])
                     default:
+                        if poArr.count < 5 { // 少于5个 直接认为失败
+                            self.doneNotice?(nil)
+                            return
+                        }
                         GHOpenCVBridge.shareManager().createLightPointArray(poArr)
                     }
                     
