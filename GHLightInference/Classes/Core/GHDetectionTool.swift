@@ -399,7 +399,7 @@ extension GHDetectionTool {
             }
         }
         
-        let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0])
+        let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints)
         return result
     }
     // 识别灯珠

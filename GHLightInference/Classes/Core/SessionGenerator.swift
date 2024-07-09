@@ -16,6 +16,8 @@ public struct DetectionResult {
     public var anchorPoints: [[CGFloat]] = [[]]
     /// 识别放缩比例数组 [width, height ...]
     public var pixelScale: [CGFloat] = [640, 640]
+    
+    public var objectPoints: [LightQueueResult] = []
 }
 
 public struct DetectionEffectModel {
@@ -37,6 +39,10 @@ public class LightQueueResult: HandyJSON {
     
     public var x: Int = 0
     public var y: Int = 0
+    public var startX: Int = 0
+    public var startY: Int = 0
+    public var endX: Int = 0
+    public var endY: Int = 0
     public var index: Int = -1
     public var totalTfScore: Int = 0
     public var score: Int = 0
