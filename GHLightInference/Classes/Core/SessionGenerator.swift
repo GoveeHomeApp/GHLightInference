@@ -49,6 +49,7 @@ public class LightQueueResult: HandyJSON {
     public var tfScore: CGFloat = 0.0
     public var errorStatus:Int = 0
     public var pName: String = ""
+    public var isBad: Bool = false
     
     required public init() { }
 }

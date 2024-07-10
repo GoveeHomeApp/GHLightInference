@@ -469,6 +469,49 @@ extension GHDetectionTool {
                         let dt = try?JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
                         let pointbase = LightQueueBase.deserialize(from: dt)
                         if let pt = pointbase, !pt.lightPoints.isEmpty {
+                            var indexArr: [Int] = []
+                            if self.bizType == 0 {
+                                // TODO: 3d 过滤一下错的离谱的点
+                                print("Count \(pt.lightPoints.count)")
+                                let ptArr = pt.lightPoints.sorted { $0.index < $1.index }
+                                for i in 0 ... self.ic/10 {
+                                    // 每十个点检查一组，将一组内y值偏差较大的值剔除
+                                    let range: (Int, Int) = (i*10, (i+1)*10 - 1)
+                                    let arr = ptArr.filter { $0.index >= range.0 && $0.index <= range.1 }.sorted { $0.y < $1.y }
+                                    // 不大于二 就不管了
+                                    if arr.count > 2 {
+                                        var temp = arr
+                                        temp.remove(at: 0)
+                                        temp.removeLast()
+                                        let average = temp.map { $0.y }.reduce(0) { $0 + $1 }/temp.count
+                                        for pt in arr {
+                                            let val = abs(pt.y - average)
+                                            if pt.y > 400 {
+                                                if val > 50 {
+                                                    indexArr.append(pt.index)
+                                                }
+                                            } else {
+                                                if val > 30 {
+                                                    indexArr.append(pt.index)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                print("log.f ===== \(indexArr.count)")
+                                let _ = indexArr.map { print("log.f ==== index is \($0)") }
+                                if !indexArr.isEmpty {
+                                    for pp in ptArr {
+                                        if indexArr.contains(pp.index) {
+                                            pp.isBad = true
+                                        }
+                                    }
+                                }
+                                print("log.f ===== pre ct \(pt.lightPoints.count)")
+                                pt.lightPoints = ptArr.filter { !$0.isBad }
+                                print("log.f ===== aft ct \(pt.lightPoints.count)")
+                            }
+                            
                             let detectionResult = self.doneDetection(points: pt)
                             self.doneNotice?(detectionResult)
                             let image = GHOpenCVBridge.shareManager().showLastOutlet()
