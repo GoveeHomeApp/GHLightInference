@@ -187,9 +187,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             guard let `self` = self else { return }
             print("log.f ==== 收到第\(step)帧效果发送成功 取帧")
             if let _ = self.transaction { //正常transaction
-                var second = 0.5
+                var second = 0.3
                 if step == 0 {
-                    second = 1 // 第一帧延时取
+                    second = 0.8 // 第一帧延时取
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + second) {
                     self.captureOneFrame()
@@ -450,6 +450,7 @@ extension GHDetectionTool {
                     default:
                         if poArr.count < 5 { // 少于5个 直接认为失败
                             self.doneNotice?(nil)
+                            self.transaction = nil
                             return
                         }
                         GHOpenCVBridge.shareManager().createLightPointArray(poArr)
@@ -521,14 +522,16 @@ extension GHDetectionTool {
                             
                             let detectionResult = self.doneDetection(points: pt)
                             self.doneNotice?(detectionResult)
+                            self.transaction = nil
+                            #if DEBUG
                             let image = GHOpenCVBridge.shareManager().showLastOutlet()
                             self.finalImage = image
                             self.imageView.image = image
-                            #if DEBUG
                             self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
                             self.doneNotice?(nil)
+                            self.transaction = nil
                         }
                     }
                 }
