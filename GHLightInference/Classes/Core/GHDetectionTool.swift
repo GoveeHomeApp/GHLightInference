@@ -404,7 +404,7 @@ extension GHDetectionTool {
     }
     // 识别灯珠
     func runDetection() {
-        // 只对第二张图进行识别
+        // 只对第一张图进行识别
         if let prepostProcessor = self.prepostProcessor {
             let image = self.afterImgArray[0]
             let imageView = self.imageView
@@ -471,7 +471,6 @@ extension GHDetectionTool {
                         if let pt = pointbase, !pt.lightPoints.isEmpty {
                             var indexArr: [Int] = []
                             if self.bizType == 0 {
-                                // TODO: 3d 过滤一下错的离谱的点
                                 print("Count \(pt.lightPoints.count)")
                                 let ptArr = pt.lightPoints.sorted { $0.index < $1.index }
                                 for i in 0 ... self.ic/10 {
@@ -495,6 +494,14 @@ extension GHDetectionTool {
                                                     indexArr.append(pt.index)
                                                 }
                                             }
+                                        }
+                                    } else if arr.count == 2 {
+                                        let first = arr[0]
+                                        let last = arr[1]
+                                        if abs(first.y-last.y) > 30 {
+                                            // 两个点差的太远了 全删了
+                                            indexArr.append(first.index)
+                                            indexArr.append(last.index)
                                         }
                                     }
                                 }
