@@ -21,7 +21,7 @@ private:
         for (int i = 0; i < totalPoints; ++i) {
             for (int j = 0; j < totalPoints; ++j) {
                 if (i != j) {
-                    float dist = norm(points[i].point2f - points[j].point2f);
+                    float dist = norm(points[i].position - points[j].position);
                     if (dist <= avgDistance * distanceThreshold) {
                         kdTree[i].emplace_back(dist, j);
                     }
@@ -39,7 +39,7 @@ private:
                     vector<float> neighborLightIndices;
                     for (int j = 0; j < count; ++j) {
                         if (kdTree[i][j].second != i) {  // 排除自身
-                            neighborLightIndices.push_back(points[kdTree[i][j].second].lightIndex);
+                            neighborLightIndices.push_back(points[kdTree[i][j].second].label);
                         }
                     }
 
@@ -59,7 +59,7 @@ private:
                         }
 
                         // 计算当前点lightIndex与邻居中位数的绝对差距
-                        points[i].localDensity = abs(points[i].lightIndex - medianLightIndex);
+                        points[i].localDensity = abs(points[i].label - medianLightIndex);
                     } else {
                         points[i].localDensity = baseLabelDiffThreshold * 2;  // 如果只有自己，设置一个较大的值
                     }
@@ -78,11 +78,11 @@ private:
             int adjustedThreshold = max(baseLabelDiffThreshold,
                                         min(static_cast<int>(ceil(points[i].localDensity)),
                                             maxLabel / 10));
-            for (const auto &pair : kdTree[i]) {
+            for (const auto &pair: kdTree[i]) {
                 double dist = pair.first;
                 int j = pair.second;
                 // 使用dist和j
-                if (abs(points[i].lightIndex - points[j].lightIndex) <= adjustedThreshold) {
+                if (abs(points[i].label - points[j].label) <= adjustedThreshold) {
                     points[i].neighbors.push_back(j);
                 }
             }
@@ -119,18 +119,18 @@ private:
     // 判断一个点是否为异常点
     bool isAnomaly(int index) {
         const auto &point = points[index];
-//        if (point.lightIndex == 236 || point.lightIndex == 350) {
+//        if (point.label == 236 || point.label == 350) {
 //            LOGD(TAG_DELETE, "--isAnomaly----- -neighbors = %d ", point.neighbors.size());
 //            if (point.neighbors.size() > 0) {
-//                LOGD(TAG_DELETE, "--isAnomaly----- -neighbors lightIndex= %d   localDensity = %d",
-//                     points[point.neighbors[0]].lightIndex,
+//                LOGD(TAG_DELETE, "--isAnomaly----- -neighbors label= %d   localDensity = %d",
+//                     points[point.neighbors[0]].label,
 //                     point.localDensity);
 //            }
 //        }
         if (point.neighbors.empty()) return true;  // 没有邻近点，视为异常
 
         // 检查邻近点数量是否符合预期
-        int actualExpectedNeighbors = min(expectedNeighbors, maxLabel - point.lightIndex);
+        int actualExpectedNeighbors = min(expectedNeighbors, maxLabel - point.label);
         if (point.neighbors.size() < actualExpectedNeighbors / 2) {
             LOGW(TAG_DELETE, " neighbors = %d  actualExpectedNeighbors=%d", point.neighbors.size(),
                  actualExpectedNeighbors / 2);
@@ -144,11 +144,11 @@ private:
                 LOGE(TAG_DELETE, "---------异常状态15");
                 continue;
             }
-            int neighborOffset = abs(points[neighborIdx].lightIndex - point.lightIndex);
-//            if (point.lightIndex == 236 || point.lightIndex == 350) {
+            int neighborOffset = abs(points[neighborIdx].label - point.label);
+//            if (point.label == 236 || point.label == 350) {
 //                LOGD(TAG_DELETE,
-//                     "--------lightIndex = %d -neighborOffset = %d  baseLabelDiffThreshold = %d",
-//                     point.lightIndex, neighborOffset, baseLabelDiffThreshold);
+//                     "--------label = %d -neighborOffset = %d  baseLabelDiffThreshold = %d",
+//                     point.label, neighborOffset, baseLabelDiffThreshold);
 //            }
             if (neighborOffset < baseLabelDiffThreshold * 2) {
                 consistentNeighbors++;
@@ -202,7 +202,7 @@ public:
 //
 //    // 输出异常点
 //    for (int anomalyIndex : anomalies) {
-//        cout << "Point " << points[anomalyIndex].lightIndex << " is anomalous." << endl;
+//        cout << "Point " << points[anomalyIndex].label << " is anomalous." << endl;
 //    }
 //
 //    return 0;

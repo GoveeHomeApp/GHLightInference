@@ -1,3 +1,6 @@
+//
+// Created by linpeng on 2024/7/3.
+//
 #ifndef LOGGER_HPP
 #define LOGGER_HPP
 
@@ -36,11 +39,21 @@ public:
 #ifdef __ANDROID__
         android_LogPriority priority;
             switch (level) {
-                case LogLevel::L_VERBOSE: priority = ANDROID_LOG_VERBOSE; break;
-                case LogLevel::L_DEBUG: priority = ANDROID_LOG_DEBUG; break;
-                case LogLevel::L_INFO: priority = ANDROID_LOG_INFO; break;
-                case LogLevel::L_WARNING: priority = ANDROID_LOG_WARN; break;
-                case LogLevel::L_ERROR: priority = ANDROID_LOG_ERROR; break;
+                case LogLevel::L_VERBOSE:
+                    priority = ANDROID_LOG_VERBOSE;
+                    break;
+                case LogLevel::L_DEBUG:
+                    priority = ANDROID_LOG_DEBUG;
+                    break;
+                case LogLevel::L_INFO:
+                    priority = ANDROID_LOG_INFO;
+                    break;
+                case LogLevel::L_WARNING:
+                    priority = ANDROID_LOG_WARN;
+                    break;
+                case LogLevel::L_ERROR:
+                    priority = ANDROID_LOG_ERROR;
+                    break;
             }
             __android_log_write(priority, tag, message.c_str());
 #elif defined(__APPLE__)

@@ -1,14 +1,18 @@
+/**
+ * Created by linpeng on 2024/7/4.
+ */
 #include "select.hpp"
 
 // 辅助函数：计算两点间的距离
 float distance2(const Point2f &p1, const Point2f &p2) {
     return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
 }
+
 // 辅助函数：判断点是否合理（基于预期距离）
 bool isReasonablePoint(const LightPoint &p1, const LightPoint &p2, float avgDistance,
                        float tolerance = 0.5) {
-    float expectedDist = abs(p1.lightIndex - p2.lightIndex) * avgDistance;
-    float actualDist = distance2(p1.point2f, p2.point2f);
+    float expectedDist = abs(p1.label - p2.label) * avgDistance;
+    float actualDist = distance2(p1.position, p2.position);
     return abs(actualDist - expectedDist) <= tolerance * expectedDist;
 }
 
@@ -22,7 +26,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
         throw runtime_error("samePoints is empty");
     }
 
-    int targetSerial = samePoints[0].lightIndex;
+    int targetSerial = samePoints[0].label;
     // 选择最佳点
     LightPoint bestPoint = samePoints[0];
 
@@ -30,7 +34,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
         // 在 totalPoints 中找到目标序号的位置
         auto it = lower_bound(totalPoints.begin(), totalPoints.end(), targetSerial,
                               [](const LightPoint &point, int num) {
-                                  return point.lightIndex < num;
+                                  return point.label < num;
                               });
 
         // 获取前后的多个点位
@@ -52,8 +56,8 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
             // 检查与前面点的关系
             for (const auto &prevPoint: prevPoints) {
                 if (isReasonablePoint(point, prevPoint, avgDistance)) {
-                    float expectedDist = abs(point.lightIndex - prevPoint.lightIndex) * avgDistance;
-                    float actualDist = distance2(point.point2f, prevPoint.point2f);
+                    float expectedDist = abs(point.label - prevPoint.label) * avgDistance;
+                    float actualDist = distance2(point.position, prevPoint.position);
                     totalDeviation += abs(actualDist - expectedDist) / expectedDist;
                     validNeighbors++;
                 }
@@ -62,8 +66,8 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
             // 检查与后面点的关系
             for (const auto &nextPoint: nextPoints) {
                 if (isReasonablePoint(point, nextPoint, avgDistance)) {
-                    float expectedDist = abs(point.lightIndex - nextPoint.lightIndex) * avgDistance;
-                    float actualDist = distance2(point.point2f, nextPoint.point2f);
+                    float expectedDist = abs(point.label - nextPoint.label) * avgDistance;
+                    float actualDist = distance2(point.position, nextPoint.position);
                     totalDeviation += abs(actualDist - expectedDist) / expectedDist;
                     validNeighbors++;
                 }
@@ -80,13 +84,13 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
 
         // 将其他点添加到错误集合
         for (const auto &point: samePoints) {
-            if (point.lightIndex != bestPoint.lightIndex || point.point2f != bestPoint.point2f) {
+            if (point.label != bestPoint.label || point.position != bestPoint.position) {
                 errorPoints.push_back(point);
-                LOGE(LOG_TAG, "---塞入异常点位 lightIndex =%d point2f = %d - %d", point.lightIndex,
-                     point.point2f.x,
-                     point.point2f.y);
-                circle(src, point.point2f, 8, Scalar(0, 0, 255), 2);
-                putText(src, to_string(point.lightIndex), point.point2f,
+                LOGE(LOG_TAG, "---塞入异常点位 label =%d position = %d - %d", point.label,
+                     point.position.x,
+                     point.position.y);
+                circle(src, point.position, 8, Scalar(0, 0, 255), 2);
+                putText(src, to_string(point.label), point.position,
                         FONT_HERSHEY_SIMPLEX, 0.7,
                         Scalar(0, 0, 255), 2);
             }
@@ -100,19 +104,19 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
 
 void
 processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoints,
-                 vector<LightPoint> &errorPoints,
-                 float avgDistance, map<int, vector<LightPoint>> sameSerialNumMap) {
+                  vector<LightPoint> &errorPoints,
+                  float avgDistance, map<int, vector<LightPoint>> sameSerialNumMap) {
     Mat outMat = src.clone();
     for (const auto &entry: sameSerialNumMap) {
         vector<LightPoint> indices = entry.second;
         if (indices.size() > 1) {
             LightPoint bestPoint = selectBestPoint(outMat, totalPoints, indices, errorPoints,
                                                    avgDistance);
-            LOGW(LOG_TAG, "---塞入正常点位 lightIndex =%d point2f = %d - %d", bestPoint.lightIndex,
-                 bestPoint.point2f.x,
-                 bestPoint.point2f.y);
-            circle(outMat, bestPoint.point2f, 8, Scalar(0, 255, 0), 2);
-            putText(outMat, to_string(bestPoint.lightIndex), bestPoint.point2f,
+            LOGW(LOG_TAG, "---塞入正常点位 label =%d position = %d - %d", bestPoint.label,
+                 bestPoint.position.x,
+                 bestPoint.position.y);
+            circle(outMat, bestPoint.position, 8, Scalar(0, 255, 0), 2);
+            putText(outMat, to_string(bestPoint.label), bestPoint.position,
                     FONT_HERSHEY_SIMPLEX, 0.7,
                     Scalar(0, 255, 0), 2);
             totalPoints.push_back(bestPoint);
@@ -133,7 +137,7 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
 //            for (const auto &entry: sameSerialNumMap) {
 //                if (abs(entry.first - currentLabel) <= maxDiff && entry.first != currentLabel) {
 //                    if (!entry.second.empty()) {
-//                        nearLabels.emplace_back(entry.first, normalPoints[entry.second[0]].point2f);
+//                        nearLabels.emplace_back(entry.first, normalPoints[entry.second[0]].position);
 //                    }
 //                }
 //            }
@@ -197,7 +201,7 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
 //                for (const auto &nearLabel: nearLabels) {
 //                    if (comparedLabels >= 2) break;  // 只比较最近的两个标签
 //                    float expectedDist = abs(nearLabel.first - serialNum) * averageDistance;
-//                    float actualDist = norm(p.point2f - nearLabel.second);
+//                    float actualDist = norm(p.position - nearLabel.second);
 //                    score += abs(actualDist - expectedDist);
 //                    comparedLabels++;
 //                }
@@ -207,20 +211,20 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
 //                    bestPoint = p;
 //                }
 //            }
-//            LOGW(LOG_TAG, "正确点 lightIndex = %d  point2f = %d - %d", bestPoint.lightIndex,
-//                 bestPoint.point2f.x, bestPoint.point2f.y);
-//            circle(outMat, bestPoint.point2f, 8, Scalar(0, 255, 0), 2);
-//            putText(outMat, to_string(bestPoint.lightIndex), bestPoint.point2f,
+//            LOGW(LOG_TAG, "正确点 label = %d  position = %d - %d", bestPoint.label,
+//                 bestPoint.position.x, bestPoint.position.y);
+//            circle(outMat, bestPoint.position, 8, Scalar(0, 255, 0), 2);
+//            putText(outMat, to_string(bestPoint.label), bestPoint.position,
 //                    FONT_HERSHEY_SIMPLEX, 0.7,
 //                    Scalar(0, 255, 0), 2);
 //            processedPoints.push_back(bestPoint);
 //
 //            for (const auto &p: candidatePoints) {
-//                if (p.point2f.x != bestPoint.point2f.x || p.point2f.y != bestPoint.point2f.y) {
-//                    LOGE(LOG_TAG, "错误点 lightIndex = %d   point2f = %d - %d ", p.lightIndex,
-//                         p.point2f.x, p.point2f.y);
-//                    circle(outMat, p.point2f, 8, Scalar(0, 0, 255), 2);
-//                    putText(outMat, to_string(p.lightIndex), p.point2f,
+//                if (p.position.x != bestPoint.position.x || p.position.y != bestPoint.position.y) {
+//                    LOGE(LOG_TAG, "错误点 label = %d   position = %d - %d ", p.label,
+//                         p.position.x, p.position.y);
+//                    circle(outMat, p.position, 8, Scalar(0, 0, 255), 2);
+//                    putText(outMat, to_string(p.label), p.position,
 //                            FONT_HERSHEY_SIMPLEX, 0.7,
 //                            Scalar(0, 0, 255), 2);
 //                    errorSerialVector.push_back(p);
@@ -246,12 +250,12 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
 //    LightPoint bestPoint = selectBestPoint(totalPoints, samePoints, errorPoints, avgDistance);
 //
 //    // 在 totalPoints 中插入或更新最佳点
-//    auto it = lower_bound(totalPoints.begin(), totalPoints.end(), bestPoint.lightIndex,
+//    auto it = lower_bound(totalPoints.begin(), totalPoints.end(), bestPoint.label,
 //                               [](const LightPoint& point, int num) {
-//                                   return point.lightIndex < num;
+//                                   return point.label < num;
 //                               });
 //
-//    if (it != totalPoints.end() && it->lightIndex == bestPoint.lightIndex) {
+//    if (it != totalPoints.end() && it->label == bestPoint.label) {
 //        *it = bestPoint;  // 更新现有点
 //    } else {
 //        totalPoints.insert(it, bestPoint);  // 插入新点

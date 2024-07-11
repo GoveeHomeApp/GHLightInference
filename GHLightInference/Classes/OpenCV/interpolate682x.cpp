@@ -1,3 +1,6 @@
+//
+//
+//
 /**
  * Created by linpeng on 2024/7/4.
  *
@@ -6,6 +9,7 @@
 插值使用线性插值方法，考虑了中心点、大小和角度
  */
 #include "interpolate682x.hpp"
+
 
 float distance(const Point2f &p1, const Point2f &p2) {
     return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
@@ -62,9 +66,15 @@ vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
                                  const Size &imageSize) {
     LOGD(LOG_TAG, "completeRects = %d", existingRects.size());
     map<int, LightPoint> rectMap;
+    float rectLen = 0;
     for (const auto &rect: existingRects) {
-        rectMap[rect.lightIndex] = rect;
+        rectMap[rect.label] = rect;
+        float curLen = max(rect.rotatedRect.size.width, rect.rotatedRect.size.height);
+        if (rectLen < curLen)
+            rectLen = curLen;
     }
+
+    targetHeight = min(max(rectLen, targetHeight / 2), targetHeight * 2);
 
     vector<LightPoint> allRects;
     int prevKnownNumber = -1;
@@ -93,7 +103,7 @@ vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
         } else {
             LOGD(LOG_TAG, "-----》补充矩形 = %d", i);
             LightPoint newRect = LightPoint();
-            newRect.lightIndex = i;
+            newRect.label = i;
             newRect.isInterpolate = true;
             newRect.rotatedRect.size = Size2f(targetWidth, targetHeight);
 
@@ -138,11 +148,6 @@ vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
                 if (prevKnownCenter.x == 0 && prevKnownCenter.y == 0) {
                     newRect.rotatedRect.center = Point2f(x.x + 40 * (i - prevKnownNumber),
                                                          x.y + offset);
-//                    if (prevKnownNumber > 0) {
-//                        newRect.rotatedRect.angle = rectMap[prevKnownNumber - 1].rotatedRect.angle;
-//                    } else {
-//                        newRect.rotatedRect.angle = prevKnownAngle;
-//                    }
                     newRect.rotatedRect.angle = 0;
                 } else {
                     newRect.rotatedRect.center =
@@ -194,14 +199,14 @@ vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
             // 计算起始点和终点
             newRect.startPoint = pair.first;
             newRect.endPoint = pair.second;
-            newRect.point2f = newRect.rotatedRect.center;
+            newRect.position = newRect.rotatedRect.center;
             allRects.push_back(newRect);
         }
     }
 
 
     sort(allRects.begin(), allRects.end(), [](const LightPoint &a, const LightPoint &b) {
-        return a.lightIndex < b.lightIndex;
+        return a.label < b.label;
     });
 
     return allRects;

@@ -376,19 +376,10 @@ extension GHDetectionTool {
         let scale = Int(UIScreen.main.scale)
         var pointsDict: [Int: [CGFloat]] = [:]
         var anchorPoints: [[CGFloat]] = []
-        
-        switch self.bizType {
-        case 1:
-            // TODO: H6820/21 => 补点逻辑
-            break
-        default: break
-        }
-        
         for res in points.lightPoints {
             let ptArray = [CGFloat(res.x), CGFloat(res.y*scale)]
             pointsDict[res.index] = ptArray
         }
-        
         // 直接拿四个点 变更点位置
         if !points.trapezoidalPoints.isEmpty {
             let res = points.trapezoidalPoints.removeLast()
@@ -398,7 +389,6 @@ extension GHDetectionTool {
                 anchorPoints.append([CGFloat(pt.x), CGFloat(pt.y*scale)])
             }
         }
-        
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints)
         return result
     }

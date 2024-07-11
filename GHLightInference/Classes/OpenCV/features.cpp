@@ -3,10 +3,13 @@
 #include "anomaly.cpp"
 #include "select.hpp"
 #include "interpolate682x.hpp"
+#include "interpolate70cx.hpp"
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <opencv2/imgproc/types_c.h>
 #include <setjmp.h>
+#include <iomanip>
+#include <sstream>
 
 jmp_buf jump_buffer;
 
@@ -30,7 +33,7 @@ int lightType = 0;
 int motionTypeSet = MOTION_HOMOGRAPHY;
 //得分点集合
 vector<LightPoint> pPoints;
-vector<Point> pPointXys;
+vector<Point2f> pPointXys;
 unordered_map<int, vector<LightPoint>> pointsStepMap;
 //记录有效帧
 unordered_map<int, Mat> frameStepMap;
@@ -111,7 +114,6 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
                 //面状灯
                 findNoodleLamp(src, pPointXys, resultObjects, outMats);
                 LOGD(LOG_TAG, "findNoodleLamp resultObjects %d", resultObjects.size());
-
             } else if (resultObjects.empty()) {
                 findByContours(src, pPointXys, resultObjects, getIcNum(), outMats);
             }
@@ -121,7 +123,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
 //                     curPoint.height, curPoint.point2f.x, curPoint.point2f.y);
                 Rect_<int> rect = curPoint.tfRect;
                 Point center = Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                curPoint.point2f = center;
+                curPoint.position = center;
                 curPoint.with = rect.width;
                 curPoint.height = rect.height;
                 pPointXys.push_back(center);
@@ -149,7 +151,8 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
                 } else {
                     Rect roi;
                     pPoints[i].buildRect(originalFrame1C, roi);
-                    rectangle(originalFrame1C, roi, Scalar(255, 0, 50), 4);
+                    if (!roi.empty())
+                        rectangle(originalFrame1C, roi, Scalar(255, 0, 50), 4);
                 }
                 if (i == pPoints.size() - 1) {
                     outMats.push_back(originalFrame1C);
@@ -168,7 +171,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
     LOGD(LOG_TAG, "pointsStepMap frameStep=%d getMaxStepCnt=%d", frameStep, getMaxStepCnt());
     if (pointsStepMap.size() == getMaxStepCnt()) {
         //--------------------------------------- 开始识别 ---------------------------------------
-        vector<Point2i> trapezoid4Points;
+        vector<Point2f> trapezoid4Points;
         LampBeadsProcessor processor = sortLampBeads(frameStepMap[STEP_VALID_FRAME_START], outMats,
                                                      trapezoid4Points);
         release();
@@ -182,7 +185,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
 void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outMats) {
     try {
         //输出一张好点图
-        vector<Point2i> points;
+        vector<Point2f> points;
         Mat dstCircle = src.clone();
         for (int i = 0; i < pPoints.size(); i++) {
             LightPoint lpoint = pPoints[i];
@@ -199,7 +202,7 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
         }
         for (int i = 0; i < processor.totalPoints.size(); i++) {
             LightPoint lpoint = processor.totalPoints[i];
-            Point2f center = lpoint.point2f;
+            Point2f center = lpoint.position;
             center.x = static_cast<int>(center.x);
             center.y = static_cast<int>(center.y);
             points.push_back(center);
@@ -219,7 +222,7 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
                 }
                 circle(dstCircle, processor.totalPoints[i].startPoint, 3, Scalar(255, 255, 0), 3);
                 circle(dstCircle, processor.totalPoints[i].endPoint, 3, Scalar(255, 255, 255), 3);
-                LOGD(LOG_TAG, "draw lightIndex = %d ", lpoint.lightIndex);
+                LOGD(LOG_TAG, "draw label = %d ", lpoint.label);
             } else {
                 Rect roi;
                 pPoints[i].buildRect(src, roi);
@@ -227,20 +230,20 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
             }
             if (lightType == TYPE_H682X) {
                 if (processor.totalPoints[i].isInterpolate) {
-                    putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
+                    putText(dstCircle, to_string(processor.totalPoints[i].label), center,
                             FONT_HERSHEY_SIMPLEX,
                             1,
                             Scalar(0, 255, 255),
                             2);
                 } else {
-                    putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
+                    putText(dstCircle, to_string(processor.totalPoints[i].label), center,
                             FONT_HERSHEY_SIMPLEX,
                             1,
                             Scalar(0, 0, 255),
                             2);
                 }
             } else {
-                putText(dstCircle, to_string(processor.totalPoints[i].lightIndex), center,
+                putText(dstCircle, to_string(processor.totalPoints[i].label), center,
                         FONT_HERSHEY_SIMPLEX,
                         0.5,
                         Scalar(0, 255, 255),
@@ -257,7 +260,7 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
  * 对灯带光点排序
  */
 LampBeadsProcessor
-sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points) {
+sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points) {
     int scoreMin = getScoreMin();
     int scoreMax = getScoreMax();
     int maxFrameStep = getMaxStepCnt();
@@ -323,11 +326,11 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
                     LOGE(TAG_DELETE, "擦除脏数据失败");
                     continue;
                 }
-                LOGD(TAG_DELETE, "erase index=%d, lightIndex=%d  errorPoint = %d x %d",
+                LOGD(TAG_DELETE, "erase index=%d, label=%d  errorPoint = %f x %f",
                      anomalies[i],
-                     processor.totalPoints[anomalies[i]].lightIndex,
-                     processor.totalPoints[anomalies[i]].point2f.x,
-                     processor.totalPoints[anomalies[i]].point2f.y);
+                     processor.totalPoints[anomalies[i]].label,
+                     processor.totalPoints[anomalies[i]].position.x,
+                     processor.totalPoints[anomalies[i]].position.y);
                 processor.totalPoints.erase(processor.totalPoints.begin() + anomalies[i]);
             }
         }
@@ -340,16 +343,19 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
         /*删除离群点+构建梯形*/
         if (lightType == TYPE_H70CX_3D) {
             Mat trapezoidMat = src.clone();
-            vector<Point2i> point4Trapezoid;
+            vector<Point2f> point4Trapezoid;
             for (int i = 0; i < processor.totalPoints.size(); i++) {
-                point4Trapezoid.push_back(processor.totalPoints[i].point2f);
+                point4Trapezoid.push_back(processor.totalPoints[i].position);
             }
             LOGD(LOG_TAG, "point4Trapezoid = %d", point4Trapezoid.size());
             ret = getMinTrapezoid(trapezoidMat, point4Trapezoid, trapezoid4Points);
             if (ret != 1) {
                 LOGE(LOG_TAG, "构建梯形异常");
             }
+//            processor.totalPoints = interpolatePoints3D(processor.totalPoints);
             outMats.push_back(trapezoidMat);
+        } else {
+            processor.totalPoints = completeLightPoints2D(processor.totalPoints, getIcNum());
         }
     } else {
         try {
@@ -358,14 +364,14 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
                 if (i >= processor.totalPoints.size() - 1)continue;
                 LightPoint curLPoint = processor.totalPoints[i];
                 LightPoint nextLPoint = processor.totalPoints[i + 1];
-                LOGD(LOG_TAG, "   i= %d=== curLPoint= %d===nextLPoint= %d", i, curLPoint.lightIndex,
-                     nextLPoint.lightIndex);
+                LOGD(LOG_TAG, "   i= %d=== curLPoint= %d===nextLPoint= %d", i, curLPoint.label,
+                     nextLPoint.label);
                 int curLightIndex;
-                if (i == 0 && curLPoint.lightIndex > 1) {
-                    curLightIndex = curLPoint.lightIndex - 1;
+                if (i == 0 && curLPoint.label > 1) {
+                    curLightIndex = curLPoint.label - 1;
                     LOGD(LOG_TAG, " 推断1====  curLightIndex=%d ", curLightIndex);
                     //找出最接近的点位
-                    LightPoint inferredPoint = findLamp(curLPoint.point2f,
+                    LightPoint inferredPoint = findLamp(curLPoint.position,
                                                         averageDistance / 0.45 * 2,
                                                         true,
                                                         curLightIndex, true);
@@ -373,12 +379,12 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
                     if (inferredPoint.errorStatus != EMPTY_POINT)
                         processor.totalPoints.push_back(inferredPoint);
                 }
-                if (nextLPoint.lightIndex - curLPoint.lightIndex > 1) {
-                    curLightIndex = curLPoint.lightIndex + 1;
+                if (nextLPoint.label - curLPoint.label > 1) {
+                    curLightIndex = curLPoint.label + 1;
                     LOGD(LOG_TAG,
                          " 推断====  curLightIndex=%d ", curLightIndex);
                     //找出最接近的点位
-                    LightPoint inferredPoint = findLamp(curLPoint.point2f,
+                    LightPoint inferredPoint = findLamp(curLPoint.position,
                                                         averageDistance / 0.45 * 2,
                                                         true,
                                                         curLightIndex, true);
@@ -395,8 +401,8 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points)
         int size = processor.totalPoints.size();
 
         int totalCount = getIcNum(); // 期望的总矩形数
-        float targetWidth = 16;
-        float targetHeight = 16 * getIcNum();
+        float targetWidth = 14;
+        float targetHeight = 12 * getIcNum();
         cv::Size imageSize(src.rows, src.cols);
 
         processor.totalPoints = completeRects(processor.totalPoints, totalCount, targetWidth,
@@ -439,7 +445,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
     sort(pPoints.begin(), pPoints.end(), compareScore);
     for (int i = 0; i < pPoints.size(); i++) {
         //--------------------绘制--------------------
-        Point2f center = pPoints[i].point2f;
+        Point2f center = pPoints[i].position;
         center.x = static_cast<int>(center.x);
         center.y = static_cast<int>(center.y);
 
@@ -491,15 +497,15 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
         //计算序列
         syncLightIndex(pPoints[i], score, lightType);
 
-        if (pPoints[i].lightIndex < 0 || pPoints[i].lightIndex > getIcNum()) {
+        if (pPoints[i].label < 0 || pPoints[i].label > getIcNum()) {
             errorSerialVector.push_back(pPoints[i]);
         } else if ((lightType == TYPE_H70CX_3D || lightType == TYPE_H70CX_2D) &&
-                   pPoints[i].lightIndex % 2 != 0) {
-            LOGW(LOG_TAG, "error lightIndex: %d", pPoints[i].lightIndex);
+                   pPoints[i].label % 2 != 0) {
+            LOGW(LOG_TAG, "error label: %d", pPoints[i].label);
             //70dx的序列是奇数点位，不满足的话就是推错点了
             errorSerialVector.push_back(pPoints[i]);
         } else {
-            processor.sameSerialNumMap[pPoints[i].lightIndex].push_back(pPoints[i]);
+            processor.sameSerialNumMap[pPoints[i].label].push_back(pPoints[i]);
             normalIndex++;
         }
     }
@@ -540,9 +546,9 @@ double calculateAverageDistance(LampBeadsProcessor &processor) {
     for (int i = 0; i < processor.normalPoints.size() - 1; i++) {
         LightPoint curLPoint = processor.normalPoints[i];
         LightPoint nextLPoint = processor.normalPoints[i + 1];
-        int xx = nextLPoint.lightIndex - curLPoint.lightIndex;
+        int xx = nextLPoint.label - curLPoint.label;
         if (xx == diff) {
-            averageDistance += norm(nextLPoint.point2f - curLPoint.point2f);
+            averageDistance += norm(nextLPoint.position - curLPoint.position);
             averageCnt += 2;
         }
     }
@@ -566,20 +572,20 @@ decisionCenterPoints(LampBeadsProcessor &processor, Mat &src) {
         LightPoint normalPoint = processor.normalPoints[i];
         processor.totalPoints.push_back(normalPoint);
         //与上一个点的间隔
-        int diff = normalPoint.lightIndex - lastLightIndex - 1;
-        if (lastLightIndex == -999999 || diff < 1) {
+        int diff = normalPoint.label - lastLightIndex - 1;
+        if (lastLightIndex == -999999 || diff < 1 || diff > 1) {
             //标记灯序作为下一次遍历节点
-            lastLightIndex = normalPoint.lightIndex;
+            lastLightIndex = normalPoint.label;
             lastPoint = normalPoint;
             continue;
         }
 
         LightPoint centerP = inferredCenter(processor.averageDistance, normalPoint, lastPoint,
                                             true);
-        if (centerP.errorStatus != EMPTY_POINT && centerP.lightIndex < getIcNum() &&
-            centerP.lightIndex >= 0)
+        if (centerP.errorStatus != EMPTY_POINT && centerP.label < getIcNum() &&
+            centerP.label >= 0)
             processor.totalPoints.push_back(centerP);
-        lastLightIndex = normalPoint.lightIndex;
+        lastLightIndex = normalPoint.label;
         lastPoint = normalPoint;
     }
     LOGD(LOG_TAG, "normalPoints = %d totalPoints = %d", processor.normalPoints.size(),
@@ -601,17 +607,17 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
             if (it == beginLP) {
                 LightPoint curLPoint = totalPoints[0];
                 LightPoint nextLPoint = totalPoints[1];
-                int inferredNextDiff = nextLPoint.lightIndex - curLPoint.lightIndex;
+                int inferredNextDiff = nextLPoint.label - curLPoint.label;
                 //第一个点
-                if (it->lightIndex > 1 && enable4BeginLeft) {
-                    LOGD(LOG_TAG, "第1个点之前缺失，begin : %d", it->lightIndex);
+                if (it->label > 1 && enable4BeginLeft) {
+                    LOGD(LOG_TAG, "第1个点之前缺失，begin : %d", it->label);
                     LightPoint inferredPoint = inferredAB2Next(nextLPoint, curLPoint, true);
-                    if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
-                        inferredPoint.lightIndex < getIcNum()) {
+                    if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.label >= 0 &&
+                        inferredPoint.label < getIcNum()) {
                         totalPoints.insert(totalPoints.begin(),
                                            inferredPoint);
                         LOGD(LOG_TAG, "补充点位 = %d  ===》重新遍历，直到往前补点失败",
-                             inferredPoint.lightIndex);
+                             inferredPoint.label);
                         it--;
                         continue;
                     } else {
@@ -619,25 +625,25 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                     }
                 }
                 if (inferredNextDiff > 1 && totalPoints.size() >= 3) {
-                    LOGD(LOG_TAG, "第1个点之后有缺失，begin : %d", it->lightIndex);
+                    LOGD(LOG_TAG, "第1个点之后有缺失，begin : %d", it->label);
                     LightPoint nextNextLPoint = totalPoints[2];
-                    bool abcHorizontal = isApproximatelyHorizontal(curLPoint.point2f,
-                                                                   nextLPoint.point2f,
-                                                                   nextNextLPoint.point2f);
+                    bool abcHorizontal = isApproximatelyHorizontal(curLPoint.position,
+                                                                   nextLPoint.position,
+                                                                   nextNextLPoint.position);
                     if (abcHorizontal) {
                         while (inferredNextDiff > 1) {
                             LightPoint inferredPoint = inferredAB2Next(nextNextLPoint, nextLPoint,
                                                                        true);
                             if (inferredPoint.errorStatus != EMPTY_POINT &&
-                                inferredPoint.lightIndex >= 0 &&
-                                inferredPoint.lightIndex < getIcNum()) {
+                                inferredPoint.label >= 0 &&
+                                inferredPoint.label < getIcNum()) {
 
-                                LOGD(LOG_TAG, "补充点位 = %d", inferredPoint.lightIndex);
+                                LOGD(LOG_TAG, "补充点位 = %d", inferredPoint.label);
                                 //从next（i+1）的前一个插入
                                 totalPoints.insert(totalPoints.begin() + 1,
                                                    inferredPoint);
-                                if (totalPoints[2].lightIndex !=
-                                    inferredPoint.lightIndex) {
+                                if (totalPoints[2].label !=
+                                    inferredPoint.label) {
                                     LOGE(LOG_TAG, "3-----------插入错误");
                                 }
                                 nextLPoint = inferredPoint;
@@ -656,7 +662,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                 LightPoint nextLPoint = totalPoints[i + 1];
                 LightPoint lastLPoint = totalPoints[i - 1];
                 //计算下一个点是否缺失
-                int inferredNextDiff = nextLPoint.lightIndex - curLPoint.lightIndex;
+                int inferredNextDiff = nextLPoint.label - curLPoint.label;
                 bool inferred2Right = true;
                 //代表nextPoint角标
                 int nextRightAdd = 0;
@@ -668,8 +674,8 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                         inferredPoint = inferredRight(curLPoint, lastLPoint, nextLPoint, i,
                                                       totalPoints, true);
                         if (inferredPoint.errorStatus != EMPTY_POINT &&
-                            inferredPoint.lightIndex >= 0 &&
-                            inferredPoint.lightIndex < getIcNum()) {
+                            inferredPoint.label >= 0 &&
+                            inferredPoint.label < getIcNum()) {
                             lastLPoint = curLPoint;
                             curLPoint = inferredPoint;
                             inferredNextDiff--;
@@ -686,7 +692,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                             continue;
                         }
                         curLPoint = totalPoints[index];
-                        if (curLPoint.lightIndex >= getIcNum()) {
+                        if (curLPoint.label >= getIcNum()) {
                             inferredNextDiff = 0;
                             continue;
                         }
@@ -695,8 +701,8 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
 
                         LOGD(LOG_TAG,
                              "向左推断，当前点序号=%d, index = %d, lastLPoint = %d, nextLPoint = %d",
-                             curLPoint.lightIndex, index, lastLPoint.lightIndex,
-                             nextLPoint.lightIndex);
+                             curLPoint.label, index, lastLPoint.label,
+                             nextLPoint.label);
 
                         inferredPoint = inferredLeft(curLPoint, lastLPoint, nextLPoint, index,
                                                      totalPoints, true);
@@ -712,7 +718,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints) {
                 }
                 int offset = nextRightAdd + lastLeftAdd;
                 it = it + offset;
-                if (it->lightIndex > getIcNum())break;
+                if (it->label > getIcNum())break;
             }
         }
     } catch (...) {
@@ -732,20 +738,20 @@ void deleteDiscontinuousPoints(LampBeadsProcessor &processor) {
         LightPoint lastLPoint = processor.totalPoints[i - 1];
 
         double averageDistanceThreshold = processor.averageDistance * 2;
-        bool lastContinuous = curLPoint.lightIndex == (lastLPoint.lightIndex + 1) && i > 2 &&
-                              lastLPoint.lightIndex ==
-                              (processor.totalPoints[i - 2].lightIndex + 1);
+        bool lastContinuous = curLPoint.label == (lastLPoint.label + 1) && i > 2 &&
+                              lastLPoint.label ==
+                              (processor.totalPoints[i - 2].label + 1);
 
-        double distance4Last = max(norm(curLPoint.point2f - lastLPoint.point2f), 1.0) /
-                               max((curLPoint.lightIndex * 1.0 - lastLPoint.lightIndex), 1.0);
+        double distance4Last = max(norm(curLPoint.position - lastLPoint.position), 1.0) /
+                               max((curLPoint.label * 1.0 - lastLPoint.label), 1.0);
 
         bool nextContinuous =
-                curLPoint.lightIndex == (nextLPoint.lightIndex - 1) &&
+                curLPoint.label == (nextLPoint.label - 1) &&
                 i < (processor.totalPoints.size() - 2) &&
-                nextLPoint.lightIndex == (processor.totalPoints[i + 2].lightIndex - 1);
+                nextLPoint.label == (processor.totalPoints[i + 2].label - 1);
 
-        double distance4Next = max(norm(nextLPoint.point2f - curLPoint.point2f), 1.0) /
-                               max((nextLPoint.lightIndex * 1.0 - curLPoint.lightIndex), 1.0);
+        double distance4Next = max(norm(nextLPoint.position - curLPoint.position), 1.0) /
+                               max((nextLPoint.label * 1.0 - curLPoint.label), 1.0);
 
         if (lastContinuous && abs(distance4Last) > averageDistanceThreshold) {
             errorPointIndexVector.push_back(i);
@@ -763,11 +769,11 @@ void deleteDiscontinuousPoints(LampBeadsProcessor &processor) {
             LOGE(TAG_DELETE, "擦除脏数据失败");
             return;
         }
-        LOGD(TAG_DELETE, "erase index=%d, lightIndex=%d  errorPoint = %d x %d",
+        LOGD(TAG_DELETE, "erase index=%d, label=%d  errorPoint = %f x %f",
              errorPointIndexVector[i],
-             processor.totalPoints[errorPointIndexVector[i]].lightIndex,
-             processor.totalPoints[errorPointIndexVector[i]].point2f.x,
-             processor.totalPoints[errorPointIndexVector[i]].point2f.y);
+             processor.totalPoints[errorPointIndexVector[i]].label,
+             processor.totalPoints[errorPointIndexVector[i]].position.x,
+             processor.totalPoints[errorPointIndexVector[i]].position.y);
         processor.totalPoints.erase(processor.totalPoints.begin() + errorPointIndexVector[i]);
     }
     LOGE(TAG_DELETE, "通过连续点位置删除点：%d", processor.totalPoints.size() - size);
@@ -783,35 +789,35 @@ void decisionRemainingPoints(LampBeadsProcessor &processor) {
         //优先从水平线上找
         LightPoint nextLPoint = processor.totalPoints[i + 1];
         LightPoint lastLPoint = processor.totalPoints[i - 1];
-        int nextDiff = nextLPoint.lightIndex - curLPoint.lightIndex;
+        int nextDiff = nextLPoint.label - curLPoint.label;
         if (nextDiff == 2) {
             //再次处理中间点位
             LightPoint centerP = inferredCenter(processor.averageDistance, nextLPoint, curLPoint,
                                                 true);
-            if (centerP.errorStatus != EMPTY_POINT && centerP.lightIndex < getIcNum() &&
-                centerP.lightIndex >= 0) {
+            if (centerP.errorStatus != EMPTY_POINT && centerP.label < getIcNum() &&
+                centerP.label >= 0) {
                 //往后插入一个点
                 processor.totalPoints.push_back(centerP);
             }
         } else if (nextDiff > 2) {
             LOGD(LOG_TAG,
-                 "【补点-X】= %d", curLPoint.lightIndex + 1);
-            LightPoint inferredPoint = findLamp(curLPoint.point2f,
+                 "【补点-X】= %d", curLPoint.label + 1);
+            LightPoint inferredPoint = findLamp(curLPoint.position,
                                                 processor.averageDistance / 0.45, false,
-                                                curLPoint.lightIndex + 1, true);
+                                                curLPoint.label + 1, true);
 
             if (inferredPoint.errorStatus != EMPTY_POINT) {
                 processor.totalPoints.push_back(inferredPoint);
             }
         }
 
-        int lastDiff = curLPoint.lightIndex - lastLPoint.lightIndex;
+        int lastDiff = curLPoint.label - lastLPoint.label;
         if (lastDiff > 2) {
-            LOGD(LOG_TAG, "【补点-Z】= %d  averageDistance = %d", curLPoint.lightIndex - 1,
+            LOGD(LOG_TAG, "【补点-Z】= %d  averageDistance = %d", curLPoint.label - 1,
                  processor.averageDistance);
-            LightPoint inferredPoint = findLamp(curLPoint.point2f,
+            LightPoint inferredPoint = findLamp(curLPoint.position,
                                                 processor.averageDistance / 0.45, false,
-                                                curLPoint.lightIndex - 1, true);
+                                                curLPoint.label - 1, true);
             if (inferredPoint.errorStatus != EMPTY_POINT) {
                 processor.totalPoints.push_back(inferredPoint);
             }
@@ -831,28 +837,28 @@ LightPoint inferredRight(LightPoint &curLPoint,
     //下一个值没有，推断点可能位置
     LOGD(LOG_TAG,
          "【Right】推断[下一个] = %d curLPoint = %d  lastLPoint = %d nextPoint = %d",
-         curLPoint.lightIndex + 1, curLPoint.lightIndex, lastLPoint.lightIndex,
-         nextLPoint.lightIndex);
-    Point2i A = lastLPoint.point2f;
-    Point2i B = curLPoint.point2f;
-    Point2i C = nextLPoint.point2f;
+         curLPoint.label + 1, curLPoint.label, lastLPoint.label,
+         nextLPoint.label);
+    Point2f A = lastLPoint.position;
+    Point2f B = curLPoint.position;
+    Point2f C = nextLPoint.position;
 
     //AB-X-C,推断X
     bool abcHorizontal = isApproximatelyHorizontal(A, B, C);
     //如果ABC 不再一个线性方向，则从A的上一个点，lastA-A-B-X是否一个线性方向
     if (!abcHorizontal && i > 2) {
         LightPoint lastLastLPoint = totalPoints[i - 2];
-        Point2i lastA = lastLastLPoint.point2f;
+        Point2f lastA = lastLastLPoint.position;
         abcHorizontal = isApproximatelyHorizontal(lastA, A, B);
     }
     if (abcHorizontal) {
         LightPoint inferredPoint = inferredAB2Next(lastLPoint, curLPoint, findErrorPoints);
-        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
-            inferredPoint.lightIndex < getIcNum()) {
-            LOGD(LOG_TAG, "【Right】推断成功：%d i = %d", inferredPoint.lightIndex,
+        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.label >= 0 &&
+            inferredPoint.label < getIcNum()) {
+            LOGD(LOG_TAG, "【Right】推断成功：%d i = %d", inferredPoint.label,
                  i);
             totalPoints.insert(totalPoints.begin() + i + 1, inferredPoint);
-            if (totalPoints[i + 1].lightIndex != inferredPoint.lightIndex) {
+            if (totalPoints[i + 1].label != inferredPoint.label) {
                 LOGE(LOG_TAG, "-----------插入错误");
             }
             return inferredPoint;
@@ -867,28 +873,28 @@ LightPoint inferredLeft(LightPoint &curLPoint,
                         bool findErrorPoints) {
     LOGD(LOG_TAG,
          "【Left】推断[上一个]点序号 = %d curLPoint = %d  lastLPoint = %d nextPoint = %d",
-         curLPoint.lightIndex - 1, curLPoint.lightIndex, lastLPoint.lightIndex,
-         nextLPoint.lightIndex);
-    Point2i A = nextLPoint.point2f;
-    Point2i B = curLPoint.point2f;
-    Point2i C = lastLPoint.point2f;
+         curLPoint.label - 1, curLPoint.label, lastLPoint.label,
+         nextLPoint.label);
+    Point2f A = nextLPoint.position;
+    Point2f B = curLPoint.position;
+    Point2f C = lastLPoint.position;
     bool abcHorizontal = isApproximatelyHorizontal(A, B, C);
     if (!abcHorizontal && i < totalPoints.size() - 2) {
         LightPoint nextNextLPoint = totalPoints[i + 2];
-        Point2i nextA = nextNextLPoint.point2f;
+        Point2f nextA = nextNextLPoint.position;
         abcHorizontal = isApproximatelyHorizontal(nextA, A, B);
         LOGD(LOG_TAG, "【Left】3---ABC水平,推断BC中间点 nextNextLPoint=%d",
-             nextNextLPoint.lightIndex);
+             nextNextLPoint.label);
     }
     if (abcHorizontal) {
         LightPoint inferredPoint = inferredAB2Next(nextLPoint, curLPoint, findErrorPoints);
-        LOGD(LOG_TAG, "【Left】2---ABC水平,推断BC中间点 = %d ", inferredPoint.lightIndex);
-        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.lightIndex >= 0 &&
-            inferredPoint.lightIndex < getIcNum()) {
+        LOGD(LOG_TAG, "【Left】2---ABC水平,推断BC中间点 = %d ", inferredPoint.label);
+        if (inferredPoint.errorStatus != EMPTY_POINT && inferredPoint.label >= 0 &&
+            inferredPoint.label < getIcNum()) {
 
-            LOGD(LOG_TAG, "【补点流程C】推断序号成功：%d  i = %d", inferredPoint.lightIndex, i);
+            LOGD(LOG_TAG, "【补点流程C】推断序号成功：%d  i = %d", inferredPoint.label, i);
             totalPoints.insert(totalPoints.begin() + i, inferredPoint);
-            if (totalPoints[i].lightIndex != inferredPoint.lightIndex) {
+            if (totalPoints[i].label != inferredPoint.label) {
                 LOGE(LOG_TAG, "2-----------插入错误");
             }
             return inferredPoint;
@@ -904,26 +910,26 @@ LightPoint inferredLeft(LightPoint &curLPoint,
  */
 LightPoint
 inferredCenter(int avgDistance, LightPoint &A, LightPoint &B, bool findErrorPoints) {
-    int lastLightIndex = B.lightIndex;
+    int lastLightIndex = B.label;
     //只补充中间点
-    double diffSegmentLenX = (A.point2f.x - B.point2f.x) / 2;
-    double diffSegmentLenY = (A.point2f.y - B.point2f.y) / 2;
-    double normPoint = abs(distanceP(A.point2f, B.point2f));
+    double diffSegmentLenX = (A.position.x - B.position.x) / 2;
+    double diffSegmentLenY = (A.position.y - B.position.y) / 2;
+    double normPoint = abs(distanceP(A.position, B.position));
     if (lightType != TYPE_H682X && normPoint > avgDistance * 3.5) {
         LOGE(LOG_TAG,
-             "【补点-A】点位间隔过大，暂不补点 normPoint=%f , averageDistance=%d , lightIndex=%d",
-             normPoint, avgDistance, A.lightIndex);
+             "【补点-A】点位间隔过大，暂不补点 normPoint=%f , averageDistance=%d , label=%d",
+             normPoint, avgDistance, A.label);
         return LightPoint(EMPTY_POINT);
     }
     int curLightIndex = lastLightIndex + 1;
     LOGD(LOG_TAG,
-         "【Center】推断 %d  cur = %d, last = %d diffX = %f diffY = %f  cur(%d x %d)", curLightIndex,
-         A.lightIndex,
-         lastLightIndex, diffSegmentLenX, diffSegmentLenY, A.point2f.x, A.point2f.y);
-    int x = B.point2f.x + diffSegmentLenX;
-    int y = B.point2f.y + diffSegmentLenY;
+         "【Center】推断 %d  cur = %d, last = %d diffX = %f diffY = %f  cur(%f x %f)", curLightIndex,
+         A.label,
+         lastLightIndex, diffSegmentLenX, diffSegmentLenY, A.position.x, A.position.y);
+    int x = B.position.x + diffSegmentLenX;
+    int y = B.position.y + diffSegmentLenY;
 
-    Point2i center = Point2i(x, y);
+    Point2f center = Point2f(x, y);
 
     double distanceMin = sqrt(
             diffSegmentLenX * diffSegmentLenX + diffSegmentLenY * diffSegmentLenY);
@@ -936,26 +942,26 @@ inferredCenter(int avgDistance, LightPoint &A, LightPoint &B, bool findErrorPoin
 
 
 LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, bool findErrorPoints) {
-    int diff = A.lightIndex - B.lightIndex;
-    double diffSegmentLenX = (A.point2f.x - B.point2f.x) / diff;
-    double diffSegmentLenY = (A.point2f.y - B.point2f.y) / diff;
+    int diff = A.label - B.label;
+    double diffSegmentLenX = (A.position.x - B.position.x) / diff;
+    double diffSegmentLenY = (A.position.y - B.position.y) / diff;
 
     int inferredLightIndex, x, y;
     if (diff > 0) {
-        inferredLightIndex = B.lightIndex - 1;
-        x = B.point2f.x - diffSegmentLenX;
-        y = B.point2f.y - diffSegmentLenY;
+        inferredLightIndex = B.label - 1;
+        x = B.position.x - diffSegmentLenX;
+        y = B.position.y - diffSegmentLenY;
     } else {
-        inferredLightIndex = B.lightIndex + 1;
-        x = B.point2f.x + diffSegmentLenX;
-        y = B.point2f.y + diffSegmentLenY;
+        inferredLightIndex = B.label + 1;
+        x = B.position.x + diffSegmentLenX;
+        y = B.position.y + diffSegmentLenY;
     }
 
     LOGD(LOG_TAG,
          "当前点：%d  A:%d 推断点：%d  diff : %d  diffSegmentLenX : %f  diffSegmentLenY : %f ",
-         B.lightIndex, A.lightIndex, inferredLightIndex, diff, diffSegmentLenX, diffSegmentLenY);
+         B.label, A.label, inferredLightIndex, diff, diffSegmentLenX, diffSegmentLenY);
 
-    Point2i center = Point2i(x, y);
+    Point2f center = Point2f(x, y);
     double distanceMin = sqrt(
             diffSegmentLenX * diffSegmentLenX + diffSegmentLenY * diffSegmentLenY);
 
@@ -1010,7 +1016,10 @@ Mat alignImg(Mat &src, Mat &trans, bool back4Matrix) {
 
         TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS, number_of_iterations2,
                               termination_eps2);
-        findTransformECC(im1Src, im2Trans, warp_matrix, motionTypeSet, criteria);//, mask
+        double ecc = findTransformECC(im1Src, im2Trans, warp_matrix, motionTypeSet,
+                                      criteria);//, mask
+        double alignmentQuality = 1.0 / (1.0 + ecc);
+        LOGW(LOG_TAG, "alignmentQuality = %f", alignmentQuality);
         if (motionTypeSet == MOTION_HOMOGRAPHY) {
             warpPerspective(trans, alignedImg, warp_matrix, trans.size(),
                             INTER_LINEAR + WARP_INVERSE_MAP);
@@ -1038,7 +1047,7 @@ bool compareScore(const LightPoint &p1, const LightPoint &p2) {
 }
 
 bool compareIndex(const LightPoint &p1, const LightPoint &p2) {
-    return p1.lightIndex < p2.lightIndex;
+    return p1.label < p2.label;
 }
 
 /**
@@ -1057,7 +1066,7 @@ findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &
         LightPoint lightPoint = meanColor(image, stepFrame, lPoint, meanColorMat);
         result.push_back(lightPoint);
     }
-    outMats.push_back(meanColorMat);
+//    outMats.push_back(meanColorMat);
     return result;
 }
 
@@ -1073,7 +1082,7 @@ LightPoint meanColor(Mat &image, int stepFrame, LightPoint &lPoint, Mat &meanCol
         Rect roi;
         Scalar avgPixelIntensity;
         Mat region;
-        Point2f point = lPoint.point2f;
+        Point2f point = lPoint.position;
         CUS_COLOR_TYPE colorType = E_W;
         if (lightType == TYPE_H682X && !lPoint.rotatedRect.size.empty()) {
             // 创建掩码
@@ -1133,7 +1142,7 @@ LightPoint meanColor(Mat &image, int stepFrame, LightPoint &lPoint, Mat &meanCol
     }
 }
 
-bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C) {
+bool isApproximatelyHorizontal(Point2f A, Point2f B, Point2f C) {
     double slopeBA = (double) (B.y - A.y) / (B.x - A.x);
     double slopeCA = (double) (C.y - A.y) / (C.x - A.x);
 
@@ -1154,6 +1163,13 @@ bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C) {
     }
 }
 
+std::string floatToDouble(float value, int precision = 1) {
+    double d = static_cast<double>(value); // 将 float 转换为 double
+    std::ostringstream out; // 创建一个字符串流
+    out << std::fixed << std::setprecision(precision) << d; // 设置格式并写入字符串流
+    return out.str(); // 返回格式化后的字符串
+}
+
 /**
  * LightPoint集合输出json
  */
@@ -1162,13 +1178,15 @@ string lightPointsToJson(const vector<LightPoint> &points) {
     ss << "[";
     for (int i = 0; i < points.size(); i++) {
         ss << "{";
-        ss << "\"x\": " << points[i].point2f.x << ", ";
-        ss << "\"y\": " << points[i].point2f.y << ", ";
-        ss << "\"startX\": " << points[i].startPoint.x << ", ";
-        ss << "\"startY\": " << points[i].startPoint.y << ", ";
-        ss << "\"endX\": " << points[i].endPoint.x << ", ";
-        ss << "\"endY\": " << points[i].endPoint.y << ", ";
-        ss << "\"index\": " << points[i].lightIndex << ", ";
+        ss << "\"x\": " << floatToDouble(points[i].position.x) << ", ";
+        ss << "\"y\": " << floatToDouble(points[i].position.y) << ", ";
+        if (lightType == TYPE_H682X) {
+            ss << "\"startX\": " << floatToDouble(points[i].startPoint.x) << ", ";
+            ss << "\"startY\": " << floatToDouble(points[i].startPoint.y) << ", ";
+            ss << "\"endX\": " << floatToDouble(points[i].endPoint.x) << ", ";
+            ss << "\"endY\": " << floatToDouble(points[i].endPoint.y) << ", ";
+        }
+        ss << "\"index\": " << points[i].label << ", ";
         ss << "\"tfScore\": " << points[i].tfScore;
         ss << "}";
         if (i < points.size() - 1) {
@@ -1182,8 +1200,12 @@ string lightPointsToJson(const vector<LightPoint> &points) {
 string splicedJson(string a, string b) {
     stringstream ss;
     ss << "{";
-    ss << "\"lightPoints\": " << a << ", ";
-    ss << "\"trapezoidalPoints\": " << b << "";
+    if (lightType == TYPE_H70CX_3D) {
+        ss << "\"lightPoints\": " << a << ", ";
+        ss << "\"trapezoidalPoints\": " << b << "";
+    } else {
+        ss << "\"lightPoints\": " << a << "";
+    }
     ss << "}";
     return ss.str();
 }
@@ -1191,7 +1213,7 @@ string splicedJson(string a, string b) {
 /**
  * Point2i集合输出json
  */
-string point2iToJson(const vector<Point2i> &points) {
+string point2iToJson(const vector<Point2f> &points) {
     stringstream ss;
     ss << "[";
     for (int i = 0; i < points.size(); i++) {
@@ -1207,8 +1229,8 @@ string point2iToJson(const vector<Point2i> &points) {
         }
         ss << "{";
         ss << "\"pName\": \"" << name << "\", ";
-        ss << "\"x\": " << points[i].x << ", ";
-        ss << "\"y\": " << points[i].y << "";
+        ss << "\"x\": " << floatToDouble(points[i].x) << ", ";
+        ss << "\"y\": " << floatToDouble(points[i].y) << "";
         ss << "}";
         if (i < points.size() - 1) {
             ss << ", ";
@@ -1222,7 +1244,7 @@ string point2iToJson(const vector<Point2i> &points) {
  * 从非序列疑似灯珠集合中查找点位
  */
 LightPoint
-findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
+findLamp(Point2f &center, double minDistance, bool checkDistance, int inferredLightIndex,
          bool findErrorPoints) {
     if (inferredLightIndex > getIcNum()) return LightPoint(EMPTY_POINT);
     int sequenceType = getNonSequenceType(inferredLightIndex, lightType);
@@ -1240,7 +1262,7 @@ findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLi
         findLp = findLampInVector(center, minDistance, checkDistance, errorSerialVector, 4);
     }
     if (findLp.errorStatus != EMPTY_POINT) {
-        findLp.lightIndex = inferredLightIndex;
+        findLp.label = inferredLightIndex;
     }
     return findLp;
 }
@@ -1293,7 +1315,7 @@ bool isPointNext(const Point2f &pointA, const Point2f &point,
 /**
  * 从集合中查找点位
  */
-LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDistance,
+LightPoint findLampInVector(Point2f &center, double minDistance, bool checkDistance,
                             vector<LightPoint> &points, int type) {
 
     if (points.empty() || (checkDistance && minDistance > 150 && lightType != TYPE_H682X)) {
@@ -1305,11 +1327,11 @@ LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDista
         double distanceTemp = minDistance * 0.7;
         for (int i = 0; i < points.size(); i++) {
             LightPoint itA = points[i];
-            int contrastX = itA.point2f.x;
-            int contrastY = itA.point2f.y;
+            float contrastX = itA.position.x;
+            float contrastY = itA.position.y;
             double distance = sqrt((contrastX - center.x) * (contrastX - center.x) +
                                    (contrastY - center.y) * (contrastY - center.y));
-//            LOGD(LOG_TAG, "distance = %f  distanceTemp = %f  contrast=%d x %d", distance,
+//            LOGD(LOG_TAG, "distance = %f  distanceTemp = %f  contrast=%f x %f", distance,
 //                 distanceTemp, contrastX, contrastY);
             if (distance < distanceTemp) {
                 distanceTemp = distance;

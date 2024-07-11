@@ -20,7 +20,7 @@ public:
     /**
      * 坐标集合
      */
-    vector<Point2i> pointXys;
+    vector<Point2f> pointXys;
 
     /**
      * 正常序列点位
@@ -80,7 +80,7 @@ LightPoint meanColor(Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColor
 /**
  * 对灯带光点排序
  */
-LampBeadsProcessor sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2i> &trapezoid4Points);
+LampBeadsProcessor sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points);
 
 Mat alignImg(Mat &src, Mat &trans, bool back4Matrix);
 
@@ -133,11 +133,11 @@ void release();
 /**
  * Point2i集合输出json
  */
-string point2iToJson(const vector<Point2i> &points);
+string point2iToJson(const vector<Point2f> &points);
 
 string splicedJson(string a, string b);
 
-bool isApproximatelyHorizontal(Point2i A, Point2i B, Point2i C);
+bool isApproximatelyHorizontal(Point2f A, Point2f B, Point2f C);
 
 LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, bool findErrorPoints);
 
@@ -146,13 +146,13 @@ bool compareIndex(const LightPoint &p1, const LightPoint &p2);
 /**
  * 找出最可能点位
  */
-LightPoint findLamp(Point2i &center, double minDistance, bool checkDistance, int inferredLightIndex,
+LightPoint findLamp(Point2f &center, double minDistance, bool checkDistance, int inferredLightIndex,
                     bool findErrorPoints);
 
 /**
  * 从集合中查找点位
  */
-LightPoint findLampInVector(Point2i &center, double minDistance, bool checkDistance,
+LightPoint findLampInVector(Point2f &center, double minDistance, bool checkDistance,
                             vector<LightPoint> &points, int type);
 
 /**
@@ -170,6 +170,7 @@ LightPoint inferredLeft(LightPoint &curLPoint,
                         LightPoint &lastLPoint,
                         LightPoint &nextLPoint, int i, vector<LightPoint> &totalPoints,
                         bool findErrorPoints);
+
 /**
  * 推测中间点
  * @param A 后一个点
@@ -177,4 +178,5 @@ LightPoint inferredLeft(LightPoint &curLPoint,
  */
 LightPoint
 inferredCenter(int avgDistance, LightPoint &A, LightPoint &B, bool findErrorPoints);
+
 #endif

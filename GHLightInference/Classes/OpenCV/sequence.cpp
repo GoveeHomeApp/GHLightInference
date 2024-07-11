@@ -382,7 +382,7 @@ int getIcNum() {
  * 根据得分计算灯序号
  */
 void syncLightIndex(LightPoint &point, int score, int lightType) {
-    point.lightIndex = getLightIndex(score, lightType);
+    point.label = getLightIndex(score, lightType);
 }
 
 int getLightIndex(int score, int lightType) {
