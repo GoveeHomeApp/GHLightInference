@@ -309,6 +309,15 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
 
 // MARK: configuration
 extension GHDetectionTool {
+    
+    func doneFailed() {
+        DispatchQueue.main.async {
+            // 抛出识别失败
+            self.doneNotice?(nil)
+            self.transaction = nil
+        }
+    }
+    
     func prepareConfig(sku: String) {
         var cf = ProcessorConfig()
         if sku.hasPrefix("H682") {
@@ -358,17 +367,24 @@ extension GHDetectionTool {
     }
     // 对齐
     func alignmentAll(finishHandler: () -> Void) {
-        for (index, image) in self.preImageArray.enumerated() {
-            let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
-            #if DEBUG
-            self.imageView.image = resImage
-//            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
-            #endif
-            self.afterImgArray.append(resImage)
-        }
-        
-        if self.preImageArray.count == self.afterImgArray.count {
-            finishHandler()
+        do  {
+            for (index, image) in self.preImageArray.enumerated() {
+                let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
+                #if DEBUG
+                self.imageView.image = resImage
+                #endif
+                self.afterImgArray.append(resImage)
+            }
+            
+            if self.preImageArray.count == self.afterImgArray.count {
+                finishHandler()
+            }
+        } catch let error as NSError {
+            print("log.f ====== RFAILED Caught an Objective-C exception: \(error.localizedDescription)")
+            self.doneFailed()
+        } catch {
+            print("log.f ====== RFAILED Caught a Swift error: \(error)")
+            self.doneFailed()
         }
     }
     // 结果组装返回
@@ -410,13 +426,30 @@ extension GHDetectionTool {
             }
             
             DispatchQueue.global().async {
-                guard let outputs = self.inferencer.module.detect(image: &pixelBuffer) else {
-                    return
+                var outputs: [NSNumber] = []
+                // 处理识别异常捕获
+                do  {
+                    if let op = self.inferencer.module.detect(image: &pixelBuffer) {
+                        outputs = op
+                    } else {
+                        self.doneFailed()
+                    }
+                } catch let error as NSError {
+                    print("log.f ====== RFAILED Caught an Objective-C exception: \(error.localizedDescription)")
+                    self.doneFailed()
+                } catch {
+                    print("log.f ====== RFAILED Caught a Swift error: \(error)")
+                    self.doneFailed()
                 }
+                // 预测数据
                 let nmsPredictions = prepostProcessor.outputsToNMSPredictions(outputs: outputs, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
+                
+                // 回调主线程绘图
                 DispatchQueue.main.async {
                     prepostProcessor.showDetection(imageView: self.imageView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
+                    #if DEBUG
                     self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+                    #endif
                     var poArr: [PredictObject] = []
                     var ct = 0
                     for pre in nmsPredictions.filter({ $0.score > 0.2 && $0.classIndex != 2 }) {
@@ -446,16 +479,22 @@ extension GHDetectionTool {
                         GHOpenCVBridge.shareManager().createLightPointArray(poArr)
                     }
                     
-                    
                     var resultJsonString = ""
-                    for (idx, _) in self.afterImgArray.enumerated() {
-                        let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType)
-                        if idx == self.afterImgArray.count-1 {
-                            resultJsonString = jsonStr
+                    do {
+                        for (idx, _) in self.afterImgArray.enumerated() {
+                            let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType)
+                            if idx == self.afterImgArray.count-1 {
+                                resultJsonString = jsonStr
+                            }
                         }
+                    } catch let error as NSError {
+                        print("log.f ====== RFAILED Caught an Objective-C exception: \(error.localizedDescription)")
+                        self.doneFailed()
+                    } catch {
+                        print("log.f ====== RFAILED Caught a Swift error: \(error)")
+                        self.doneFailed()
                     }
                     print("log.f result json string \(resultJsonString)")
-                    
                     if let data = resultJsonString.data(using: .utf8) {
                         let dt = try?JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
                         let pointbase = LightQueueBase.deserialize(from: dt)

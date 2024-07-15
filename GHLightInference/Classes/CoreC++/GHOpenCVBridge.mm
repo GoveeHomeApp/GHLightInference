@@ -104,26 +104,30 @@ vector<LightPoint> resLp;
 }
 
 - (UIImage *)alignmentWithImage:(UIImage *)image step:(NSInteger)stepCount rotation:(BOOL)isRotate {
-    
-    self.alignStep = stepCount;
-    int ste = (int)stepCount;
-    Mat aliMat = [self cvMatFromUIImage:image];
-    Mat rotate = [self rotateImage90DegreesWithMat:aliMat rotate:ROTATE_90_CLOCKWISE];
-    
-    if (isRotate) {
-        cv::Mat imageBGR;
-        cv::cvtColor(rotate, imageBGR, cv::COLOR_RGBA2BGR);
-        Mat resMat = alignResize(ste, imageBGR);
-        cv::Mat resRGBA;
-        cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
-        return [self UIImageFromCVMat:resRGBA];
-    } else {
-        cv::Mat imageBGR;
-        cv::cvtColor(aliMat, imageBGR, cv::COLOR_RGBA2BGR);
-        Mat resMat = alignResize(ste, imageBGR);
-        cv::Mat resRGBA;
-        cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
-        return [self UIImageFromCVMat:resRGBA];
+    try {
+        self.alignStep = stepCount;
+        int ste = (int)stepCount;
+        Mat aliMat = [self cvMatFromUIImage:image];
+        Mat rotate = [self rotateImage90DegreesWithMat:aliMat rotate:ROTATE_90_CLOCKWISE];
+        
+        if (isRotate) {
+            cv::Mat imageBGR;
+            cv::cvtColor(rotate, imageBGR, cv::COLOR_RGBA2BGR);
+            Mat resMat = alignResize(ste, imageBGR);
+            cv::Mat resRGBA;
+            cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
+            return [self UIImageFromCVMat:resRGBA];
+        } else {
+            cv::Mat imageBGR;
+            cv::cvtColor(aliMat, imageBGR, cv::COLOR_RGBA2BGR);
+            Mat resMat = alignResize(ste, imageBGR);
+            cv::Mat resRGBA;
+            cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
+            return [self UIImageFromCVMat:resRGBA];
+        }
+    } catch (const std::exception& exception) {
+        NSLog(@"%s", exception.what());
+        throw exception;
     }
 }
 
@@ -147,10 +151,15 @@ vector<LightPoint> resLp;
 }
 
 - (NSString *)caculateNumByStep:(NSInteger)stepCount bizType:(NSInteger)type {
-    string jsonStr = "";
-    jsonStr = sortStripByStep((int)stepCount, resLp, type, outMats);
-    NSString * res = [NSString stringWithUTF8String:jsonStr.c_str()];
-    return res;
+    try {
+        string jsonStr = "";
+        jsonStr = sortStripByStep((int)stepCount, resLp, type, outMats);
+        NSString * res = [NSString stringWithUTF8String:jsonStr.c_str()];
+        return res;
+    } catch (const std::exception& exception) {
+        NSLog(@"%s", exception.what());
+        throw exception;
+    }
 }
 
 - (void)clearAllresLp {
