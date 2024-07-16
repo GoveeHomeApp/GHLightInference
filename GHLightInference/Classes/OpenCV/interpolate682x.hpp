@@ -38,8 +38,13 @@ vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
                                  int totalCount, float targetWidth, float targetHeight,
                                  const Size &imageSize);
 
+cv::Point2f
+extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType2D fitType,
+                 cv::Size sizeLimit);
+
 vector<LightPoint> interpolateAndExtrapolatePoints(
-        const vector<LightPoint> &input,
+        const Mat &src,
+        vector<LightPoint> &input,
         int min,
         int max,
         int fitPoints, float targetWidth, float targetHeight,

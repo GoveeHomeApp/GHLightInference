@@ -83,7 +83,6 @@ void signal_handler(int signal) {
 
 /**释放资源*/
 void release() {
-    lightType = 0;
     pointsStepMap.clear();
     frameStepMap.clear();
     pPointXys.clear();
@@ -412,7 +411,6 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 
         if (getIcNum() > 10) {
             vector<LightPoint> pointMin;
-
             vector<LightPoint> pointMax;
             for (auto &item: processor.totalPoints) {
                 if (item.label < 10) {
@@ -423,9 +421,9 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
             }
 
             LOGW(LOG_TAG, "pointMax = %d pointMin = %d", pointMax.size(), pointMin.size());
-            pointMin = interpolateAndExtrapolatePoints(pointMin, 0, 10, 2, targetWidth,
+            pointMin = interpolateAndExtrapolatePoints(src, pointMin, 0, 10, 2, targetWidth,
                                                        targetHeight);
-            pointMax = interpolateAndExtrapolatePoints(pointMax, 10, 20, 2, targetWidth,
+            pointMax = interpolateAndExtrapolatePoints(src, pointMax, 10, 20, 2, targetWidth,
                                                        targetHeight);
             // 合并两个集合
             vector<LightPoint> mergedVec;
@@ -434,7 +432,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
             mergedVec.insert(mergedVec.end(), pointMax.begin(), pointMax.end());
             processor.totalPoints = mergedVec;
         } else {
-            processor.totalPoints = interpolateAndExtrapolatePoints(processor.totalPoints, 0,
+            processor.totalPoints = interpolateAndExtrapolatePoints(src, processor.totalPoints, 0,
                                                                     totalCount,
                                                                     2, targetWidth,
                                                                     targetHeight);

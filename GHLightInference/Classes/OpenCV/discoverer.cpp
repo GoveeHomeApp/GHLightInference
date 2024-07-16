@@ -459,7 +459,7 @@ vector<LightPoint> removeLargeRectangles(vector<LightPoint> &lightStrips) {
     vector<double> lengths;
     for (const auto &lp: lightStrips) {
         int length = max(lp.tfRect.width, lp.tfRect.height);
-        if (length <= 350) {
+        if (length <= 450) {
             lengths.push_back(length);
         }
     }
