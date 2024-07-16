@@ -12,14 +12,13 @@
 cv::Point2f
 extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType fitType) {
     if (points.size() < 2) return cv::Point2f(0, 0);  // Not enough points to extrapolate
-
     std::vector<double> x, y;
     for (const auto &p: points) {
         x.push_back(p.x);
         y.push_back(p.y);
     }
 
-    cv::Mat A, B, coeffs;
+    cv::Mat A, coeffs;
     int degree = static_cast<int>(fitType);
 
     // Prepare matrices for polynomial fitting
@@ -33,11 +32,38 @@ extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType 
     cv::Mat y_mat(y);
     cv::solve(A, y_mat, coeffs, cv::DECOMP_QR);
 
-    // Extrapolate
-    double extrapolated_x = x.back() + labelDiff * (x.back() - x.front()) / (points.size() - 1);
-    double extrapolated_y = 0;
-    for (int i = 0; i <= degree; ++i) {
-        extrapolated_y += coeffs.at<double>(i) * std::pow(extrapolated_x, i);
+    // Calculate the direction vector
+    double dx = x.back() - x.front();
+    double dy = y.back() - y.front();
+    double length = std::sqrt(dx * dx + dy * dy);
+
+    // Normalize the direction vector
+    if (length > 1e-6) {  // Avoid division by zero
+        dx /= length;
+        dy /= length;
+    } else {
+        // If points are too close, use a default direction (e.g., positive x-axis)
+        dx = 1.0;
+        dy = 0.0;
+    }
+
+    // Calculate the step size
+    double step = length / (points.size() - 1);
+
+    // Extrapolate both x and y
+    double extrapolated_x = x.back() + labelDiff * step * dx;
+    double extrapolated_y = y.back() + labelDiff * step * dy;
+
+    // If polynomial fitting is desired (degree > 0), adjust y using the fitted polynomial
+    if (degree > 0) {
+        double fitted_y = 0;
+        for (int i = 0; i <= degree; ++i) {
+            fitted_y += coeffs.at<double>(i) * std::pow(extrapolated_x, i);
+        }
+
+        // Blend the linear extrapolation with the polynomial fit
+        double alpha = 0.2; // Adjust this value to control the blend
+        extrapolated_y = alpha * extrapolated_y + (1 - alpha) * fitted_y;
     }
 
     return cv::Point2f(extrapolated_x, extrapolated_y);

@@ -24,19 +24,6 @@ pair<Point2f, Point2f> getEndPoints(const RotatedRect &rect);
  */
 float distance(const Point2f &p1, const Point2f &p2);
 
-/**
- * 纠正点到屏幕内
- */
-Point2f adjustPointToImageBoundary(const Point2f &point, const Size &imageSize);
-
-LightPoint adjustRectToImageBoundary(const LightPoint &rect, const Size &imageSize);
-
-/**
- * 补全点位
- */
-vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
-                                 int totalCount, float targetWidth, float targetHeight,
-                                 const Size &imageSize);
 
 cv::Point2f
 extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType2D fitType,

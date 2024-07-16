@@ -215,7 +215,7 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
                 }
                 circle(dstCircle, processor.totalPoints[i].startPoint, 3, Scalar(255, 255, 0), 3);
                 circle(dstCircle, processor.totalPoints[i].endPoint, 3, Scalar(255, 255, 255), 3);
-                LOGD(LOG_TAG, "draw label = %d ", lpoint.label);
+//                LOGD(LOG_TAG, "draw label = %d ", lpoint.label);
             } else {
                 Rect roi;
                 pPoints[i].buildRect(src, roi);
@@ -286,7 +286,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 
     /*处理分值相同的点*/
     processSamePoints(src, outMats, processor.totalPoints, errorSerialVector, averageDistance,
-                      processor.sameSerialNumMap);
+                      processor.sameSerialNumMap, lightType);
 
     if (lightType == TYPE_H70CX_3D || lightType == TYPE_H70CX_2D) {
         /*推测中间夹点*/
@@ -421,9 +421,11 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
             }
 
             LOGW(LOG_TAG, "pointMax = %d pointMin = %d", pointMax.size(), pointMin.size());
-            pointMin = interpolateAndExtrapolatePoints(src, pointMin, 0, 10, 2, targetWidth,
+            pointMin = interpolateAndExtrapolatePoints(src, pointMin, 0, getIcNum() / 2, 2,
+                                                       targetWidth,
                                                        targetHeight);
-            pointMax = interpolateAndExtrapolatePoints(src, pointMax, 10, 20, 2, targetWidth,
+            pointMax = interpolateAndExtrapolatePoints(src, pointMax, getIcNum() / 2,
+                                                       getIcNum(), 2, targetWidth,
                                                        targetHeight);
             // 合并两个集合
             vector<LightPoint> mergedVec;

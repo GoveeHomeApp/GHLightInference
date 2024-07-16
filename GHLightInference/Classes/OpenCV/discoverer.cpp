@@ -204,95 +204,6 @@ double angle(Vec4i line) {
     return atan2(line[3] - line[1], line[2] - line[0]);
 }
 
-double distanceBetweenPoints(Point2f p1, Point2f p2) {
-    Point2f diff = p1 - p2;
-    return sqrt(diff.x * diff.x + diff.y * diff.y);
-}
-
-double calculateUniformIntervalScore(const vector<LightBead> &beads) {
-    if (beads.size() < 3) return 1.0;  // 如果灯珠数量少于3，认为是均匀的
-
-    vector<double> intervals;
-    for (size_t i = 1; i < beads.size(); i++) {
-        double interval = norm(beads[i].center - beads[i - 1].center);
-        intervals.push_back(interval);
-    }
-
-    double meanInterval = accumulate(intervals.begin(), intervals.end(), 0.0) / intervals.size();
-    double maxDeviation = 0.0;
-
-    for (const auto &interval: intervals) {
-        double deviation = abs(interval - meanInterval) / meanInterval;
-        maxDeviation = max(maxDeviation, deviation);
-    }
-
-    return 1.0 - min(maxDeviation, 1.0);  // 归一化到 [0, 1] 范围
-}
-
-bool isBeadAligned(const vector<LightBead> &bar, const LightBead &bead) {
-    if (bar.size() < 2) return true;  // 如果灯条中还不足两个灯珠，任何新灯珠都可以加入
-    // 检查新灯珠是否与灯条末端足够接近，但不超过80
-    RotatedRect rect = fitRotatedRect(bar);
-    float radius = 0.0f;
-    if (!bar.empty()) {
-        for (const auto &item: bar) {
-            radius += item.radius;
-        }
-        radius = radius / bar.size();
-    }
-    radius = max(radius, 4.0f);
-
-    // 检查是否所有轮廓都大致在一条直线上
-    Vec4f line;
-    vector<Point2f> centers;
-    for (const auto &c: bar) {
-        centers.push_back(c.center);
-    }
-
-    fitLine(centers, line, DIST_L2, 0, 0.01, 0.01);
-
-    int allAligned = 1;
-    double maxDistance = 0;
-    for (const auto &c: bar) {
-        Point vec(line[0], line[1]);
-        Point ptOnLine(line[2], line[3]);
-        Point ptToCenter = c.center - ptOnLine;
-        float distance = abs(ptToCenter.cross(vec));
-        if (distance > max(30.0f, radius)) {  // 允许的最大偏差
-            LOGW(LOG_TAG, "允许的最大偏差");
-            allAligned = 0;
-            break;
-        }
-        maxDistance = max(maxDistance,
-                          distanceBetweenPoints(c.center, bar[0].center));
-    }
-    // 检查间距
-    bool hasOnline = (allAligned == 1) && maxDistance <= radius * (bar.size() - 1) * 4;
-    LOGW(LOG_TAG, "maxDistance=%f,  maxL=%f allAligned=%d radius=%f  barSize=%d", maxDistance,
-         (radius * (bar.size() - 1) * 4), allAligned, radius, bar.size());
-    float newLength = min(distanceP(bead.center, bar.back().center),
-                          distanceP(bead.center, bar.front().center));
-//    // 检查新灯珠是否在灯条的延长线上
-//    float dotProduct = direction.dot(newDirection / newLength);
-//    float angleThreshold = cos(CV_PI / 18);  // 允许10度的角度偏差
-
-    float min = cv::max(cv::min(rect.size.width, rect.size.height), radius);
-    float distanceThreshold = max(min * 4.0f, 35.0f);
-    LOGD(LOG_TAG,
-         "distanceThreshold = %f    radius = %f     newLength = %f  ", distanceThreshold, radius,
-         newLength);
-    return hasOnline && newLength < distanceThreshold;
-}
-
-RotatedRect fitRotatedRect(const vector<LightBead> &beads) {
-    vector<Point2f> points;
-    for (const auto &bead: beads) {
-        points.push_back(bead.center);
-    }
-    return minAreaRect(points);
-}
-
-
 Rect2i safeRect(const cv::Rect2i &region, const cv::Size &imageSize) {
     cv::Rect2i safe = region;
     safe.x = safe.x - 4;
@@ -355,51 +266,103 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
     if (safeRegion.width <= 0 || safeRegion.height <= 0) {
         return cv::RotatedRect(); // 返回一个空的RotatedRect
     }
-
+    cv::Mat gray,hsv,binary2;
     cv::Mat roi = input(safeRegion);
-
-    Mat gray, enhanced, blurred, binary, morphed;
-
     // 转换为灰度图
     cvtColor(roi, gray, COLOR_BGR2GRAY);
+    Mat result = roi.clone();
 
-    // 增强亮度对比度
-    Ptr<CLAHE> clahe = createCLAHE();
-    clahe->setClipLimit(4);
-    clahe->apply(gray, enhanced);
+    cv::cvtColor(roi, hsv, cv::COLOR_BGR2HSV);
+    // 提取亮度通道
+    std::vector<cv::Mat> hsvChannels;
+    cv::split(hsv, hsvChannels);
+    cv::Mat value = hsvChannels[2];
 
     // 应用高斯模糊以减少噪声
-    GaussianBlur(enhanced, blurred, Size(1, 1), 0);
+    cv::GaussianBlur(value, value, cv::Size(5, 5), 0);
 
+    // 定义绿色和红色灯条的颜色范围（根据实际情况调整）
+    Scalar lower_green(35, 50, 50);
+    Scalar upper_green(85, 255, 255);
 
-    vector<vector<Point>> contours;
-    int threshValue = 180;
-    double regionArea = safeRegion.width * safeRegion.height * 0.3;
-//    LOGD(LOG_TAG, "regionArea = %f", regionArea);
-    while (threshValue < 220) {
-        threshold(blurred, binary, threshValue, 255, THRESH_BINARY);
-        binary = morphologyImage(binary, 3, 0, MORPH_ELLIPSE);
-        findContours(binary, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-        // 找到面积最大的轮廓
-        double maxArea = 0;
-        for (size_t i = 0; i < contours.size(); i++) {
-            double area = contourArea(contours[i]);
-            if (area > maxArea) {
-                maxArea = area;
+    Scalar lower_red1(0, 50, 50);
+    Scalar upper_red1(10, 255, 255);
+    Scalar lower_red2(170, 50, 50);
+    Scalar upper_red2(180, 255, 255);
+
+    // 颜色分割
+    Mat mask_green, mask_red1, mask_red2, mask_red, mask;
+    inRange(hsv, lower_green, upper_green, mask_green);
+    inRange(hsv, lower_red1, upper_red1, mask_red1);
+    inRange(hsv, lower_red2, upper_red2, mask_red2);
+
+    // 合并红色和绿色的掩码
+    mask_red = mask_red1 | mask_red2;
+    mask = mask_green | mask_red;
+
+    // 使用Otsu方法进行阈值处理
+    double otsuThresh = cv::threshold(value, binary2, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+    Mat binary1;
+    Mat dst = Mat::zeros(roi.size(), CV_8UC1);
+    int maxIterations = 8;
+    otsuThresh = otsuThresh + 10;
+    double minContourArea = 200;
+    Mat resultGray = gray.clone();
+    int stopIterations = 0;
+    for (int i = 0; i < maxIterations && otsuThresh < 235; ++i) {
+        stopIterations = i;
+        // 应用二值化
+        cv::threshold(gray, binary1, otsuThresh, 255, cv::THRESH_BINARY);
+
+        // 查找轮廓
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(binary1, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+        // 对大面积区域应用更高的阈值
+        cv::Mat roiIteration;
+        // 遍历大面积轮廓
+        for (const auto &contour: contours) {
+            double area = contourArea(contour);
+            if (area > minContourArea) {
+                // 创建掩码
+                Mat maskIteration = Mat::zeros(roi.size(), CV_8UC1);
+                drawContours(maskIteration, vector<vector<cv::Point>>{contour}, 0,
+                             cv::Scalar(255), -1);
+
+                resultGray.copyTo(roiIteration, maskIteration);
+            } else {
+                if (i < 3 && area < 30) {
+                } else {
+                    cv::drawContours(dst, std::vector<std::vector<cv::Point>>{contour}, 0,
+                                     cv::Scalar(255), -1);
+                }
             }
         }
-        if (maxArea < regionArea) {
-            break;
-        }
-        threshValue += 6;
-        LOGD(LOG_TAG, "contours = %d   thresh = %d", contours.size(), threshValue);
+        resultGray = roiIteration;
+        // 增加阈值，为下一次迭代做准备
+        otsuThresh += 6;
     }
-    contours = removeLargeContours(contours);
+//    outMats.push_back(dst);
 
-//    outMats.push_back(binary);
+    mask = mask & dst;
+
+    LOGD(LOG_TAG, "otsuThresh = %f  stopIterations = %d", otsuThresh, stopIterations);
+    // 形态学操作
+    cv::Mat morphed1;
+    cv::Mat kernel1 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+    cv::Mat kernel2 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(1, 1));
+    cv::morphologyEx(mask, morphed1, cv::MORPH_CLOSE, kernel1);
+    cv::morphologyEx(morphed1, morphed1, cv::MORPH_OPEN, kernel2);
+//    outMats.push_back(morphed1);
+
+    // 查找轮廓
+    std::vector<std::vector<cv::Point>> contours1;
+    cv::findContours(morphed1, contours1, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+
     // 合并所有轮廓的点集
     vector<Point> allPoints;
-    for (const auto &contour: contours) {
+    for (const auto &contour: contours1) {
         allPoints.insert(allPoints.end(), contour.begin(), contour.end());
     }
     if (allPoints.empty()) {
@@ -419,7 +382,7 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
 }
 
 std::vector<std::vector<cv::Point>>
-removeLargeContours(const std::vector<std::vector<cv::Point>> &contours, double threshold ,
+removeLargeContours(const std::vector<std::vector<cv::Point>> &contours, double threshold,
                     size_t minContourCount) {
     // 如果轮廓数量不大于minContourCount，直接返回原始轮廓
     if (contours.size() <= minContourCount) {

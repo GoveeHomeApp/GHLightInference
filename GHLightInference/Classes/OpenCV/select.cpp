@@ -111,7 +111,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
 void
 processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoints,
                   vector<LightPoint> &errorPoints,
-                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap) {
+                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap,int lightType) {
     sort(totalPoints.begin(), totalPoints.end(),
          [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
 
@@ -131,5 +131,7 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
             totalPoints.push_back(bestPoint);
         }
     }
-    outMats.push_back(outMat);
+    if (lightType != TYPE_H682X) {
+        outMats.push_back(outMat);
+    }
 }

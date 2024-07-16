@@ -49,12 +49,6 @@ std::pair<cv::Point2f, cv::Point2f> getEndPoints(const cv::RotatedRect &rect) {
     return {topCenter, bottomCenter};
 }
 
-Point2f adjustPointToImageBoundary(const Point2f &point, const Size &imageSize) {
-    return Point2f(
-            max(0.0f, min(static_cast<float>(imageSize.width), point.x)),
-            max(0.0f, min(static_cast<float>(imageSize.height), point.y))
-    );
-}
 
 double sigmoid(double x, double scale = 10.0) {
     return 1.0 / (1.0 + std::exp(-x / scale));
@@ -71,14 +65,13 @@ cv::Point2f
 extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType2D fitType,
                  cv::Size sizeLimit) {
     if (points.size() < 2) return cv::Point2f(0, 0); // Not enough points to extrapolate
-
     std::vector<double> x, y;
     for (const auto &p: points) {
         x.push_back(p.x);
         y.push_back(p.y);
     }
 
-    cv::Mat A, B, coeffs;
+    cv::Mat A, coeffs;
     int degree = static_cast<int>(fitType);
 
     // Prepare matrices for polynomial fitting
@@ -92,16 +85,43 @@ extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType2
     cv::Mat y_mat(y);
     cv::solve(A, y_mat, coeffs, cv::DECOMP_QR);
 
-    // Extrapolate
-    double extrapolated_x = x.back() + labelDiff * (x.back() - x.front()) / (points.size() - 1);
-    double extrapolated_y = 0;
-    for (int i = 0; i <= degree; ++i) {
-        extrapolated_y += coeffs.at<double>(i) * std::pow(extrapolated_x, i);
+    // Calculate the direction vector
+    double dx = x.back() - x.front();
+    double dy = y.back() - y.front();
+    double length = std::sqrt(dx * dx + dy * dy);
+
+    // Normalize the direction vector
+    if (length > 1e-6) {  // Avoid division by zero
+        dx /= length;
+        dy /= length;
+    } else {
+        // If points are too close, use a default direction (e.g., positive x-axis)
+        dx = 1.0;
+        dy = 0.0;
+    }
+
+    // Calculate the step size
+    double step = length / (points.size() - 1);
+
+    // Extrapolate both x and y
+    double extrapolated_x = x.back() + labelDiff * step * dx;
+    double extrapolated_y = y.back() + labelDiff * step * dy;
+
+    // If polynomial fitting is desired (degree > 0), adjust y using the fitted polynomial
+    if (degree > 0) {
+        double fitted_y = 0;
+        for (int i = 0; i <= degree; ++i) {
+            fitted_y += coeffs.at<double>(i) * std::pow(extrapolated_x, i);
+        }
+
+        // Blend the linear extrapolation with the polynomial fit
+        double alpha = 0.2; // Adjust this value to control the blend
+        extrapolated_y = alpha * extrapolated_y + (1 - alpha) * fitted_y;
     }
 
     // Apply smooth limiting to the extrapolated point
-    extrapolated_x = smoothLimit(extrapolated_x, 0, static_cast<double>(sizeLimit.width - 1));
-    extrapolated_y = smoothLimit(extrapolated_y, 0, static_cast<double>(sizeLimit.height - 1));
+//    extrapolated_x = smoothLimit(extrapolated_x, 0, static_cast<double>(sizeLimit.width - 1));
+//    extrapolated_y = smoothLimit(extrapolated_y, 0, static_cast<double>(sizeLimit.height - 1));
 
     return cv::Point2f(extrapolated_x, extrapolated_y);
 }
@@ -261,8 +281,8 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
         // 后向外推
         if (result.back().label < maxLabel) {
             std::vector<cv::Point2f> points;
-            for (int i = std::max(0, static_cast<int>(result.size()) - fitPoints);
-                 i < result.size(); ++i) {
+            for (int i = 0; i < result.size(); ++i) {
+                LOGD(LOG_TAG, "points push %d", result[i].label);
                 points.push_back(result[i].position);
             }
 
@@ -313,156 +333,4 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
     LOGD(LOG_TAG, "线性补充：result = %d  input = %d  补充：%d", result.size(), input.size(),
          result.size() - input.size());
     return result;
-}
-
-
-vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
-                                 int totalCount, float targetWidth, float targetHeight,
-                                 const Size &imageSize) {
-    LOGD(LOG_TAG, "completeRects = %d", existingRects.size());
-    map<int, LightPoint> rectMap;
-    float rectLen = 0;
-    for (const auto &rect: existingRects) {
-        rectMap[rect.label] = rect;
-        float curLen = max(rect.rotatedRect.size.width, rect.rotatedRect.size.height);
-        if (rectLen < curLen)
-            rectLen = curLen;
-    }
-
-    targetHeight = min(max(rectLen, targetHeight / 2), targetHeight * 2);
-
-    vector<LightPoint> allRects;
-    int prevKnownNumber = -1;
-    Point2f prevKnownCenter;
-    float prevKnownAngle;
-
-    for (int i = 0; i < totalCount; ++i) {
-        if (rectMap.find(i) != rectMap.end()) {
-            RotatedRect rotatedRect = rectMap[i].rotatedRect;
-            if (rotatedRect.size.width > rotatedRect.size.height) {
-                rotatedRect.angle = rotatedRect.angle + 90;
-            }
-            LOGD(LOG_TAG, "纠正尺寸 = %d  angle = %f  %f - %f", i, rotatedRect.angle,
-                 rotatedRect.size.width, rotatedRect.size.height);
-            rotatedRect = RotatedRect(rotatedRect.center, Size2f(targetWidth, targetHeight),
-                                      rotatedRect.angle);
-            auto pair = getEndPoints(rotatedRect);
-            // 计算起始点和终点
-            rectMap[i].startPoint = pair.first;
-            rectMap[i].endPoint = pair.second;
-            rectMap[i].rotatedRect = rotatedRect;
-            allRects.push_back(rectMap[i]);
-            prevKnownNumber = i;
-            prevKnownCenter = rectMap[i].rotatedRect.center;
-            prevKnownAngle = rectMap[i].rotatedRect.angle;
-        } else {
-            LOGD(LOG_TAG, "-----》补充矩形 = %d", i);
-            LightPoint newRect = LightPoint();
-            newRect.label = i;
-            newRect.isInterpolate = true;
-            newRect.rotatedRect.size = Size2f(targetWidth, targetHeight);
-
-            // 寻找下一个已知矩形
-            int nextKnownNumber = totalCount;
-            Point2f nextKnownCenter;
-            float nextKnownAngle;
-            for (int j = i + 1; j < totalCount; ++j) {
-                if (rectMap.find(j) != rectMap.end()) {
-                    nextKnownNumber = j;
-                    nextKnownCenter = rectMap[j].rotatedRect.center;
-                    nextKnownAngle = rectMap[j].rotatedRect.angle;
-                    break;
-                }
-            }
-            int offset = 60;
-            if (i % 2 == 0) {
-                offset = -60;
-            }
-            // 计算新矩形的位置和角度
-            if (prevKnownNumber != -1 && nextKnownNumber < totalCount) {
-                // 在两个已知矩形之间均匀分布
-                float t = static_cast<float>(i - prevKnownNumber) /
-                          (nextKnownNumber - prevKnownNumber);
-
-                newRect.rotatedRect.center = prevKnownCenter * (1 - t) + nextKnownCenter * t;
-                newRect.rotatedRect.angle = prevKnownAngle * (1 - t) + nextKnownAngle * t;
-                Point2f cCenter = newRect.rotatedRect.center;
-                LOGD(LOG_TAG,
-                     "prevKnownNumbere= %d  nextKnownNumber = %d  t = %f",
-                     prevKnownNumber, nextKnownNumber, t);
-                LOGD(LOG_TAG,
-                     "在两个已知矩形之间均匀分布 = %f x %f  prevCenter = %f x %f  nextCenter = %f x %f  prevKnownAngle = %f, nextKnownAngle = %f",
-                     cCenter.x, cCenter.y, prevKnownCenter.x, prevKnownCenter.y, nextKnownCenter.x,
-                     nextKnownCenter.y, prevKnownAngle, nextKnownAngle);
-            } else if (prevKnownNumber != -1) {
-                // 只有前面的已知矩形，使用等间距外推
-                Point2f x = (prevKnownNumber > 0 ? rectMap[prevKnownNumber - 1].rotatedRect.center
-                                                 : Point2f(0, 0));
-
-                Point2f direction = prevKnownCenter - x;
-                if (prevKnownCenter.x == 0 && prevKnownCenter.y == 0) {
-                    newRect.rotatedRect.center = Point2f(x.x + 40 * (i - prevKnownNumber),
-                                                         x.y + offset);
-                    newRect.rotatedRect.angle = 0;
-                } else {
-                    newRect.rotatedRect.center =
-                            prevKnownCenter + direction * (i - prevKnownNumber);
-                    newRect.rotatedRect.angle = prevKnownAngle;
-                }
-                Point2f cCenter = newRect.rotatedRect.center;
-                LOGD(LOG_TAG,
-                     "prevKnownNumbere= %d  nextKnownNumber = %d  direction = %f x %f  x = %f x %f",
-                     prevKnownNumber, nextKnownNumber, direction.x, direction.y, x.x, x.y);
-                LOGD(LOG_TAG,
-                     "只有前面的已知矩形 = %f x %f  prevCenter = %f x %f  prevKnownAngle = %f",
-                     cCenter.x, cCenter.y, prevKnownCenter.x, prevKnownCenter.y, prevKnownAngle);
-            } else if (nextKnownNumber < totalCount) {
-                // 只有后面的已知矩形，使用等间距外推
-                Point2f x = (nextKnownNumber < totalCount - 1 ? rectMap[nextKnownNumber +
-                                                                        1].rotatedRect.center
-                                                              : Point2f(imageSize.width,
-                                                                        imageSize.height));
-                Point2f direction = nextKnownCenter - x;
-                if (x.x == 0 && x.y == 0) {
-                    newRect.rotatedRect.center = Point2f(
-                            nextKnownCenter.x - 40 * (nextKnownNumber - i),
-                            nextKnownCenter.y + offset);
-//                    newRect.rotatedRect.angle = nextKnownAngle + 90;
-                    newRect.rotatedRect.angle = 0;
-                } else {
-                    newRect.rotatedRect.center =
-                            nextKnownCenter - direction * (nextKnownNumber - i);
-                    newRect.rotatedRect.angle = nextKnownAngle;
-                }
-
-                Point2f cCenter = newRect.rotatedRect.center;
-                LOGD(LOG_TAG,
-                     "prevKnownNumbere= %d  nextKnownNumber = %d  direction = %f x %f  x = %f x %f",
-                     prevKnownNumber, nextKnownNumber, direction.x, direction.y, x.x, x.y);
-                LOGD(LOG_TAG,
-                     "只有后面的已知矩形 = %f x %f  nextKnownCenter = %f x %f  nextKnownAngle = %f",
-                     cCenter.x, cCenter.y, nextKnownCenter.x, nextKnownCenter.y, prevKnownAngle);
-            } else {
-                // 没有任何已知矩形，使用图像中心
-                newRect.rotatedRect.center = Point2f(imageSize.width / 2.0f,
-                                                     imageSize.height / 2.0f);
-                newRect.rotatedRect.angle = 0;
-            }
-
-            // 计算起始点和终点
-            auto pair = getEndPoints(newRect.rotatedRect);
-            // 计算起始点和终点
-            newRect.startPoint = pair.first;
-            newRect.endPoint = pair.second;
-            newRect.position = newRect.rotatedRect.center;
-            allRects.push_back(newRect);
-        }
-    }
-
-
-    sort(allRects.begin(), allRects.end(), [](const LightPoint &a, const LightPoint &b) {
-        return a.label < b.label;
-    });
-
-    return allRects;
 }
