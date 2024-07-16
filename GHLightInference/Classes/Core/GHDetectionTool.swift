@@ -530,9 +530,21 @@ extension GHDetectionTool {
                                         let first = arr[0]
                                         let last = arr[1]
                                         if abs(first.y-last.y) > 30 {
-                                            // 两个点差的太远了 全删了
-                                            indexArr.append(first.index)
-                                            indexArr.append(last.index)
+                                            // 两个点差的太远了
+                                            // 找出比两个点序号小的最大序号点
+                                            let res = ptArr.filter { $0.index < first.index && $0.index < last.index }.sorted { $0.index < $1.index }.last
+                                            if let r = res {
+                                                let v1 = abs(r.y - first.y)
+                                                let v2 = abs(r.y - last.y)
+                                                if v1 > 30 && v2 <= 30 {
+                                                    indexArr.append(first.index)
+                                                } else if v1 <= 30 && v2 > 30 {
+                                                    indexArr.append(last.index)
+                                                } else {
+                                                    indexArr.append(first.index)
+                                                    indexArr.append(last.index)
+                                                }
+                                            }
                                         }
                                     }
                                 }
