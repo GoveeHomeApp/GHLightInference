@@ -180,7 +180,7 @@ vector<vector<int>> getColors(int frameStep) {
         int icFixedRatio = icNumber / (icNumber - pow(2, getMaxStepCnt()) + 2);
         for (int index = 0; index < icNumber; index++) {
             if ((index + 1) % icFixedRatio != 0) {
-                LOGD(LOG_TAG, "index = %d cntEvenIndex = %d", index, cntEvenIndex);
+//                LOGD(LOG_TAG, "index = %d cntEvenIndex = %d", index, cntEvenIndex);
                 if (cntOddIndex > indexList.size()) {
                     LOGE(LOG_TAG, "cntOddIndex > indexList,  cntOddIndex=%d,  index=%d",
                          cntOddIndex,
@@ -201,7 +201,7 @@ vector<vector<int>> getColors(int frameStep) {
             } else {
                 colorMap.push_back({index, numbers[cntEvenIndex]});
                 greenMap[index] = cntEvenIndex;
-                LOGD(LOG_TAG, "index = %d cntEvenIndex = %d", index, cntEvenIndex);
+//                LOGD(LOG_TAG, "index = %d cntEvenIndex = %d", index, cntEvenIndex);
                 cntEvenIndex++;
                 if (cntEvenIndex == 2) {
                     cntEvenIndex = 0;

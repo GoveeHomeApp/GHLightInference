@@ -106,7 +106,7 @@ bool compareScore(const LightPoint &p1, const LightPoint &p2);
 /**
  * LightPoint集合输出json
  */
-string lightPointsToJson(const vector<LightPoint> &points);
+string lightPointsToJson(const vector<LightPoint> &points,int lightTypeSet);
 
 
 /**
@@ -117,8 +117,8 @@ double calculateAverageDistance(LampBeadsProcessor &processor);
 /**
  * 推测中间夹点
  */
-void
-decisionCenterPoints(LampBeadsProcessor &processor, Mat &src);
+vector<LightPoint>
+decisionCenterPoints(vector<LightPoint> &input, double averageDistance);
 
 /**
  * 从红绿固定点和错点中推测点位

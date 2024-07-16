@@ -31,7 +31,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (UIImage *)alignmentWithImage:(UIImage *)image step:(NSInteger)stepCount rotation:(BOOL)isRotate;
 
 // 识别完 生成vector<LightPoint>
-- (void)createLightPointArray:(NSArray *)poArray;
+- (void)createLightPointArray:(NSArray *)poArray withBiz:(NSInteger)bizType;
 
 // 识别完位置 计算灯序
 /// @param bizType: 业务类型 0-70XC 1-682X

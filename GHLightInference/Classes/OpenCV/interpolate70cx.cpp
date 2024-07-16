@@ -6,26 +6,268 @@
 插值使用线性插值方法，考虑了中心点、大小和角度
  */
 #include "interpolate70cx.hpp"
-#include <iostream>
+#include "inferredp.hpp"
 
-std::vector<LightPoint>
-completeLightPoints2D(const std::vector<LightPoint> &inputPoints, int maxNum) {
-    std::vector<LightPoint> completedPoints;
+
+cv::Point2f
+extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType fitType) {
+    if (points.size() < 2) return cv::Point2f(0, 0);  // Not enough points to extrapolate
+
+    std::vector<double> x, y;
+    for (const auto &p: points) {
+        x.push_back(p.x);
+        y.push_back(p.y);
+    }
+
+    cv::Mat A, B, coeffs;
+    int degree = static_cast<int>(fitType);
+
+    // Prepare matrices for polynomial fitting
+    A = cv::Mat::zeros(x.size(), degree + 1, CV_64F);
+    for (int i = 0; i < A.rows; ++i) {
+        for (int j = 0; j <= degree; ++j) {
+            A.at<double>(i, j) = std::pow(x[i], j);
+        }
+    }
+
+    cv::Mat y_mat(y);
+    cv::solve(A, y_mat, coeffs, cv::DECOMP_QR);
+
+    // Extrapolate
+    double extrapolated_x = x.back() + labelDiff * (x.back() - x.front()) / (points.size() - 1);
+    double extrapolated_y = 0;
+    for (int i = 0; i <= degree; ++i) {
+        extrapolated_y += coeffs.at<double>(i) * std::pow(extrapolated_x, i);
+    }
+
+    return cv::Point2f(extrapolated_x, extrapolated_y);
+}
+
+vector<LightPoint> interpolateAndExtrapolatePoints(
+        const vector<LightPoint> &input,
+        int max,
+        int fitPoints,
+        FitType fitType
+) {
+    int maxLabel = max - 1;
+    std::vector<LightPoint> result;
+    std::unordered_set<int> existingLabels;
+
+    // 首先，添加所有输入点并记录它们的标签
+    for (const auto &point: input) {
+        result.push_back(point);
+        existingLabels.insert(point.label);
+    }
+    LOGD(LOG_TAG, "interpolateAndExtrapolatePoints %d   result= %d", maxLabel, result.size());
+    // 对结果进行排序
+    std::sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
+        return a.label < b.label;
+    });
+
+    // 插值
+    std::vector<LightPoint> interpolated;
+    for (size_t i = 0; i < result.size() - 1; ++i) {
+        int start_label = result[i].label;
+        int end_label = result[i + 1].label;
+        int gap = end_label - start_label;
+
+        if (gap > 1) {
+            cv::Point2f start_point = result[i].position;
+            cv::Point2f end_point = result[i + 1].position;
+            cv::Point2f step = (end_point - start_point) / static_cast<float>(gap);
+
+            for (int j = 1; j < gap; ++j) {
+                int new_label = start_label + j;
+                if (existingLabels.find(new_label) == existingLabels.end()) {
+                    cv::Point2f new_point = start_point + step * static_cast<float>(j);
+
+                    LightPoint lp = LightPoint();
+                    lp.label = new_label;
+                    lp.position = new_point;
+                    interpolated.emplace_back(lp);
+                    existingLabels.insert(new_label);
+                }
+            }
+        }
+    }
+
+    // 将插值点添加到结果中
+    result.insert(result.end(), interpolated.begin(), interpolated.end());
+
+    LOGD(LOG_TAG, "补充内点：result = %d  input = %d  补充：%d  interpolated=%d", result.size(),
+         input.size(),
+         result.size() - input.size(), interpolated.size());
+
+    std::sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
+        return a.label < b.label;
+    });
+    // 外推
+    if (!result.empty()) {
+        // 前向外推
+        LOGD(LOG_TAG, "补充外推： start = %d", result.front().label);
+        if (result.front().label > 0) {
+            std::vector<cv::Point2f> points;
+            for (int i = 0; i < std::min(fitPoints, static_cast<int>(result.size())); ++i) {
+                points.push_back(result[i].position);
+            }
+
+            for (int i = result.front().label - 1; i >= 0; --i) {
+                if (existingLabels.find(i) == existingLabels.end()) {
+                    cv::Point2f extrapolatedPoint = extrapolatePoint(points,
+                                                                     result.front().label - i,
+                                                                     fitType);
+                    LightPoint lp = LightPoint();
+                    lp.label = i;
+                    lp.position = extrapolatedPoint;
+                    LOGD(LOG_TAG, "1 外推： label = %d  position= %f - %f", lp.label, lp.position.x,
+                         lp.position.y);
+                    result.emplace_back(lp);
+                    existingLabels.insert(i);
+                    // 更新拟合点集
+                    points.insert(points.begin(), extrapolatedPoint);
+                    if (points.size() > fitPoints) {
+                        points.pop_back();
+                    }
+                }
+            }
+        }
+
+        LOGD(LOG_TAG, "2 补充外推： end = %d  maxLabel= %d", result.back().label, maxLabel);
+        // 后向外推
+        if (result.back().label < maxLabel) {
+            std::vector<cv::Point2f> points;
+            for (int i = std::max(0, static_cast<int>(result.size()) - fitPoints);
+                 i < result.size(); ++i) {
+                points.push_back(result[i].position);
+            }
+
+            for (int i = result.back().label + 1; i <= maxLabel; ++i) {
+                if (existingLabels.find(i) == existingLabels.end()) {
+                    cv::Point2f extrapolatedPoint = extrapolatePoint(points,
+                                                                     i - result.back().label,
+                                                                     fitType);
+                    LightPoint lp = LightPoint();
+                    lp.label = i;
+                    lp.position = extrapolatedPoint;
+                    LOGD(LOG_TAG, "外推： label = %d  position= %f - %f", lp.label, lp.position.x,
+                         lp.position.y);
+                    result.emplace_back(lp);
+                    existingLabels.insert(i);
+                    // 更新拟合点集
+                    points.push_back(extrapolatedPoint);
+                    if (points.size() > fitPoints) {
+                        points.erase(points.begin());
+                    }
+                }
+            }
+        }
+    }
+
+    // 最后再次对结果进行排序
+    std::sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
+        return a.label < b.label;
+    });
+    LOGD(LOG_TAG, "线性补充：result = %d  input = %d  补充：%d", result.size(), input.size(),
+         result.size() - input.size());
+    return result;
+}
+
+
+//// 使用线性插值
+//vector<LightPoint> interpolateLinear(const vector<LightPoint>& points, int maxLabel) {
+//    vector<float> labels, values;
+//    for (const auto& lp : points) {
+//        labels.push_back(static_cast<float>(lp.label));
+//        values.push_back(lp.position.y);
+//    }
+//
+//    cv::Mat labelsMat(labels), valuesMat(values);
+//
+//    vector<LightPoint> interpolatedPoints;
+//    for (int label = 0; label <= maxLabel; ++label) {
+//        float y;
+//        cv::Mat(static_cast<float>(label)).reshape(1, 1).convertTo(y, CV_32F, cv::Mat::linearInterpolate(labelsMat, valuesMat, cv::Mat(static_cast<float>(label))));
+//        float x = label * (600.0f / maxLabel);  // 线性映射标签到 x 坐标
+//        interpolatedPoints.push_back({{x, y}, label});
+//    }
+//
+//    return interpolatedPoints;
+//}
+
+void
+drawPolynomialPoints(cv::Mat &image, const vector<LightPoint> &points, const cv::Scalar &color,
+                     bool drawLabels) {
+    for (const auto &lp: points) {
+        cv::circle(image, lp.position, 3, color, -1);
+        if (drawLabels) {
+            cv::putText(image, to_string(lp.label), lp.position + cv::Point2f(5, 5),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 1);
+        }
+    }
+}
+
+//int main() {
+//    cv::Mat image = cv::Mat::zeros(400, 600, CV_8UC3);  // 创建一个黑色图像
+//
+////    vector<LightPoint> originalPoints = generateSamplePoints();
+//    int maxLabel = 0;
+//    for (const auto &lp: originalPoints) {
+//        maxLabel = max(maxLabel, lp.label);
+//    }
+//
+//    // 绘制原始点
+//    drawPoints(image, originalPoints, cv::Scalar(0, 0, 255), true);  // 红色，显示标签
+//
+//    // 使用多项式拟合补全点
+//    vector<LightPoint> polyPoints = interpolatePolynomial(originalPoints, maxLabel);
+//    drawPoints(image, polyPoints, cv::Scalar(0, 255, 0));  // 绿色
+//
+//    // 使用样条插值补全点
+//    vector<LightPoint> splinePoints = interpolateSpline(originalPoints, maxLabel);
+//    drawPoints(image, splinePoints, cv::Scalar(255, 0, 0));  // 蓝色
+//
+//    cv::imshow("Interpolation Result", image);
+//    cv::imwrite("interpolation_result.png", image);
+//    cv::waitKey(0);
+//
+//    return 0;
+//}
+
+// 绘制点和曲线
+void drawPointsAndCurve(cv::Mat &image, const vector<LightPoint> &originalPoints,
+                        const vector<cv::Point2f> &interpolatedPoints,
+                        const cv::Scalar &color) {
+    // 绘制原始点
+    for (const auto &lp: originalPoints) {
+        cv::circle(image, lp.position, 5, cv::Scalar(0, 0, 255), -1);  // 红色
+        cv::putText(image, to_string(lp.label), lp.position + cv::Point2f(5, 5),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 1);
+    }
+
+    // 绘制插值曲线
+    for (int i = 1; i < interpolatedPoints.size(); ++i) {
+        cv::line(image, interpolatedPoints[i - 1], interpolatedPoints[i], color, 2);
+    }
+}
+
+vector<LightPoint>
+completeLightPoints2D(const vector<LightPoint> &inputPoints, int maxNum) {
+    vector<LightPoint> completedPoints;
     int oldSize = inputPoints.size();
     // 按lightIndex对输入点进行排序
-    std::vector<LightPoint> sortedPoints = inputPoints;
-    std::sort(sortedPoints.begin(), sortedPoints.end(),
-              [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
+    vector<LightPoint> sortedPoints = inputPoints;
+    sort(sortedPoints.begin(), sortedPoints.end(),
+         [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
 
     // 计算平均距离
     float avgDistance = 0;
     if (sortedPoints.size() > 1) {
-        std::vector<float> distances;
+        vector<float> distances;
         for (size_t i = 1; i < sortedPoints.size(); ++i) {
-            cv::Point2f diff = sortedPoints[i].position - sortedPoints[i - 1].position;
-            distances.push_back(cv::norm(diff));
+            Point2f diff = sortedPoints[i].position - sortedPoints[i - 1].position;
+            distances.push_back(norm(diff));
         }
-        avgDistance = std::accumulate(distances.begin(), distances.end(), 0.0f) / distances.size();
+        avgDistance = accumulate(distances.begin(), distances.end(), 0.0f) / distances.size();
     }
 
     // 找到第一个和最后一个存在的索引
@@ -33,8 +275,8 @@ completeLightPoints2D(const std::vector<LightPoint> &inputPoints, int maxNum) {
     int lastIndex = sortedPoints.back().label;
 
     // 如果必要，将范围扩展到0和maxNum
-    firstIndex = std::min(firstIndex, 0);
-    lastIndex = std::max(lastIndex, maxNum);
+    firstIndex = min(firstIndex, 0);
+    lastIndex = max(lastIndex, maxNum);
 
     // 遍历所有可能的索引
     int currentIndex = firstIndex;
@@ -51,14 +293,14 @@ completeLightPoints2D(const std::vector<LightPoint> &inputPoints, int maxNum) {
             newPoint.label = currentIndex;
 
             // 找到缺失点前后最近的已存在点
-            auto prevIt = std::lower_bound(sortedPoints.begin(), sortedPoints.end(), currentIndex,
-                                           [](const LightPoint &position, int index) {
-                                               return position.label < index;
-                                           }) - 1;
-            auto nextIt = std::upper_bound(sortedPoints.begin(), sortedPoints.end(), currentIndex,
-                                           [](int index, const LightPoint &position) {
-                                               return index < position.label;
-                                           });
+            auto prevIt = lower_bound(sortedPoints.begin(), sortedPoints.end(), currentIndex,
+                                      [](const LightPoint &position, int index) {
+                                          return position.label < index;
+                                      }) - 1;
+            auto nextIt = upper_bound(sortedPoints.begin(), sortedPoints.end(), currentIndex,
+                                      [](int index, const LightPoint &position) {
+                                          return index < position.label;
+                                      });
 
             if (prevIt >= sortedPoints.begin() && nextIt < sortedPoints.end()) {
                 // 在两个已知点之间进行插值
@@ -69,13 +311,13 @@ completeLightPoints2D(const std::vector<LightPoint> &inputPoints, int maxNum) {
                         prevIt->position + (nextIt->position - prevIt->position) * ratio;
             } else if (prevIt >= sortedPoints.begin()) {
                 // 在最后一个已知点之后进行外推
-                cv::Point2f direction = prevIt->position - (prevIt - 1)->position;
-                direction = direction / cv::norm(direction) * (avgDistance / 2);
+                Point2f direction = prevIt->position - (prevIt - 1)->position;
+                direction = direction / norm(direction) * (avgDistance / 2);
                 newPoint.position = prevIt->position + direction * (currentIndex - prevIt->label);
             } else if (nextIt < sortedPoints.end()) {
                 // 在第一个已知点之前进行外推
-                cv::Point2f direction = (nextIt + 1)->position - nextIt->position;
-                direction = direction / cv::norm(direction) * (avgDistance / 2);
+                Point2f direction = (nextIt + 1)->position - nextIt->position;
+                direction = direction / norm(direction) * (avgDistance / 2);
                 newPoint.position = nextIt->position - direction * (nextIt->label - currentIndex);
             }
             LOGD(LOG_TAG, "complete ：%d  position =%f x %f", newPoint.label, newPoint.position.x,
@@ -120,9 +362,9 @@ vector<LightPoint> interpolatePoints3D(const vector<LightPoint> &points) {
         if (section == 0) {
             maxGap = 1;
         } else if (section >= 1 && section <= 3) {
-            maxGap = 2;
-        } else {
             maxGap = 3;
+        } else {
+            maxGap = 4;
         }
 
         if (gap > 0 && gap < maxGap) {
@@ -132,6 +374,7 @@ vector<LightPoint> interpolatePoints3D(const vector<LightPoint> &points) {
                 LightPoint lp = LightPoint();
                 lp.label = result[i].label + j;
                 lp.position = newPoint;
+                LOGV(LOG_TAG, "3D补连续点 = %d   p = %f - %f", lp.label, newPoint.x, newPoint.y);
                 result.push_back(lp);
             }
         }
@@ -197,6 +440,24 @@ vector<Group> groupLightPoints(const vector<LightPoint> &lightPoints) {
         }
     }
 
+    /**
+     
+struct Group {
+    int start;
+    int end;
+    int count;
+    bool isKnown;
+    vector<LightPoint> points;
+
+    Group(int s, int e, bool k) : start(s), end(e), count(e - s + 1), isKnown(k) {}
+};
+     */
+    for (const auto &item: groups) {
+        int isKnownInt = 0;
+        if (item.isKnown)isKnownInt = 1;
+        LOGD(LOG_TAG, "Group: start=%d   end=%d   count=%d    isKnown=%d  ", item.start, item.end,
+             item.count, item.isKnown);
+    }
     return groups;
 }
 
@@ -209,7 +470,7 @@ vector<Group> groupLightPoints(const vector<LightPoint> &lightPoints) {
  * @param threshold
  * @return
  */
-vector<GapInfo> analyzeGaps(const vector<Group> &groups, double threshold = 1.7) {
+vector<GapInfo> analyzeGaps(const vector<Group> &groups, double threshold) {
     vector<GapInfo> significantGaps;
     int kNum = 0;
 
@@ -225,6 +486,251 @@ vector<GapInfo> analyzeGaps(const vector<Group> &groups, double threshold = 1.7)
             kNum = 0;  // 重置 kNum，为下一个非缺失组做准备
         }
     }
-
+    /**
+struct GapInfo {
+    int start;
+    int end;
+    double ratio;
+};
+     */
+    for (const auto &item: significantGaps) {
+        LOGD(LOG_TAG, "缺失大组: start=%d   end=%d   ratio=%f ", item.start, item.end, item.ratio);
+    }
     return significantGaps;
+}
+
+
+vector<LightPoint> interpolateMiss(vector<LightPoint> &points, int lightType,
+                                   unordered_map<int, vector<LightPoint>> &sequenceTypeMap,
+                                   float targetDistance,
+                                   bool interpolateBigMiss = false) {
+    vector<LightPoint> result;
+    int expectedLabel = 0;
+
+    sort(points.begin(), points.end(), [](const LightPoint &a, const LightPoint &b) {
+        return a.label < b.label;
+    });
+
+    for (size_t i = 0; i < points.size(); ++i) {
+        if (expectedLabel < points[i].label) {
+            int missingCount = points[i].label - expectedLabel;
+            int starIndex = (i == 0) ? i : i - 1;
+            LightPoint startLPoint = (i == 0) ? points[i] : points[i - 1];
+            LightPoint endLPoint = points[i];
+            Point2f startPoint = startLPoint.position;
+            Point2f endPoint = endLPoint.position;
+
+            if (missingCount > 5) {
+                // 只推断两个点：expectedLabel 和 points[i].label - 1
+//                vector<optional<LightPoint>> interpolated(2);
+//                interpolated[0] = LightPoint{expectedLabel};
+//                interpolated[1] = LightPoint{points[i].label - 1};
+
+                float t1 = 1.0f / missingCount;
+                float t2 = (missingCount - 1.0f) / missingCount;
+
+//                auto point1 = findX(startPoint, endPoint, t1);
+//                auto point2 = findX(startPoint, endPoint, t2);
+//
+//                if (point1) interpolated[0]->position = *point1;
+//                if (point2) interpolated[1]->position = *point2;
+//
+//                for (const auto &point: interpolated) {
+//                    if (point && point->position != cv::Point2f()) {
+//                        result.push_back(*point);
+//                    }
+//                }
+            } else if (missingCount == 1 && i > 0) {
+                // 处理中间缺失一个点的情况
+                LightPoint interpolated = findMostLikelyCenter(startLPoint, endLPoint,
+                                                               expectedLabel, lightType,
+                                                               sequenceTypeMap, targetDistance);
+                if (interpolated.errorStatus != EMPTY_POINT) {
+                    result.push_back(interpolated);
+                }
+            } else {
+
+                // 处理缺失多个点的情况
+                vector<LightPoint> interpolated(missingCount);
+                for (int j = 0; j < missingCount; ++j) {
+                    interpolated[j].label = expectedLabel + j;
+                }
+
+                // 从两端向中间推断
+                int left = 0;
+                int right = missingCount - 1;
+                while (left <= right) {
+                    if (left == right) {
+                        // 处理中间点
+                        float t = (float) (left + 1) / (missingCount + 1);
+//                        interpolated[left].position = findX(startPoint, endPoint, t);
+                    } else {
+                        // 处理左右两点
+                        float tLeft = (float) (left + 1) / (missingCount + 1);
+                        float tRight = (float) (right + 1) / (missingCount + 1);
+//                        interpolated[left].position = findX(startPoint, endPoint, tLeft);
+//                        interpolated[right].position = findX(startPoint, endPoint, tRight);
+                    }
+                    left++;
+                    right--;
+                }
+
+                // 将插值结果添加到结果中
+                result.insert(result.end(), interpolated.begin(), interpolated.end());
+
+            }
+        }
+
+        result.push_back(points[i]);
+        expectedLabel = points[i].label + 1;
+    }
+
+    return result;
+}
+
+/**
+ * 判断位置i的点的前3个点分布是否正常
+ * @return
+ */
+bool canBelievePrePre(const vector<LightPoint> &points, int i, double avgDistance) {
+    try {
+        if (i >= 2 && abs(points[i].label - points[i - 1].label) < 4) {
+            float distPrev = norm(points[i].position - points[i - 1].position);
+            float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 1.5;
+
+            float distPrevPrev = norm(points[i - 1].position - points[i - 2].position);
+            float distancePrevPrev =
+                    abs(points[i - 1].label - points[i - 2].label) * avgDistance * 1.5;
+            bool isOutlier = (distPrev > distancePrev) && (distPrevPrev <= distancePrevPrev);
+            //前面至少存在2个间距是合理的情况下，判断当前点位可能合理
+            return !isOutlier;
+        }
+    } catch (...) {
+        LOGE(LOG_TAG, "canBelievePrePre error");
+        return false;
+    }
+    return false;
+}
+
+/**
+ * 判断位置i的点的后3个点分布是否正常
+ * @return
+ */
+bool canBelieveNextNext(const vector<LightPoint> &points, int i, double avgDistance) {
+    try {
+        if (i < points.size() - 2 && abs(points[i].label - points[i - 1].label) > 4 &&
+            abs(points[i].label - points[i + 1].label) < 4) {
+            float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 1.5;
+            float distNext = norm(points[i].position - points[i + 1].position);
+            float distNextNext = norm(points[i + 1].position - points[i + 2].position);
+            float distanceNextNext =
+                    abs(points[i + 1].label - points[i + 2].label) * avgDistance * 1.5;
+            bool isOutlier = (distNext > distanceNext) &&
+                             (distNextNext <= distanceNextNext);
+            return !isOutlier;
+        }
+    } catch (...) {
+        LOGE(LOG_TAG, "canBelieveNextNext error");
+        return false;
+    }
+    return false;
+}
+
+/**
+ * 判断A B2个点是否是能够相信的
+ */
+bool
+canBelievedAB(Point2f start, Point2f end, const vector<LightPoint> &points, int i,
+              double avgDistance) {
+    //i 推断点的下一个点
+    float distance = norm(start - end);
+    if (distance > avgDistance * 1.5) {
+        LOGW(LOG_TAG, "canBelievedAB 当前点距离过大，i-label = %d", points[i].label);
+        return false;
+    }
+    bool believePrePre = canBelievePrePre(points, i, avgDistance);
+    if (believePrePre) return believePrePre;
+    return canBelieveNextNext(points, i, avgDistance);
+}
+
+/**
+ * 根据相邻位置关系找出离群点
+ */
+void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPoints,
+                         float avgDistance) {
+    int n = points.size();
+
+    if (n < 5) return;  // Need at least 5 points for this algorithm
+
+    sort(points.begin(), points.end(),
+         [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
+
+    for (int i = n - 3; i >= 2; --i) {
+        if (abs(points[i].label - points[i - 1].label) < 4 &&
+            abs(points[i].label - points[i + 1].label) < 4) {
+            float distPrev = norm(points[i].position - points[i - 1].position);
+            float distNext = norm(points[i].position - points[i + 1].position);
+            float distPrevPrev = norm(points[i - 1].position - points[i - 2].position);
+            float distNextNext = norm(points[i + 1].position - points[i + 2].position);
+            float distSkip = norm(points[i - 1].position - points[i + 1].position);
+
+            float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 3;
+            float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 3;
+            float distanceSkip = abs(points[i - 1].label - points[i + 1].label) * avgDistance * 1.5;
+            float distancePrevPrev =
+                    abs(points[i - 1].label - points[i - 2].label) * avgDistance * 1.5;
+            float distanceNextNext =
+                    abs(points[i + 1].label - points[i + 2].label) * avgDistance * 1.5;
+            bool isOutlier = (distPrev > distancePrev || distNext > distanceNext) &&
+                             (distSkip <= distanceSkip) &&
+                             (distPrevPrev <= distancePrevPrev || distNextNext <= distanceNextNext);
+
+            if (isOutlier) {
+                LOGD(LOG_TAG,
+                     "1---detectOutlierPoints label = %d  distPrev=%f  distancePrev=%f  distPrevPrev=%f  distancePrevPrev=%f ",
+                     points[i].label, distPrev, distancePrev, distPrevPrev, distancePrevPrev);
+                LOGE(LOG_TAG, "1---揪出离群点：%d", points[i].label);
+                errorPoints.push_back(points[i]);
+                points.erase(points.begin() + i);
+            }
+        } else if (abs(points[i].label - points[i - 1].label) > 4 &&
+                   abs(points[i].label - points[i + 1].label) < 4) {
+            float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 3;
+            float distNext = norm(points[i].position - points[i + 1].position);
+            float distNextNext = norm(points[i + 1].position - points[i + 2].position);
+            float distanceNextNext =
+                    abs(points[i + 1].label - points[i + 2].label) * avgDistance * 1.5;
+            bool isOutlier = (distNext > distanceNext) &&
+                             (distNextNext <= distanceNextNext);
+
+            if (isOutlier) {
+                LOGD(LOG_TAG,
+                     "2---detectOutlierPoints label = %d  distNext=%f  distanceNext=%f  distNextNext=%f  distanceNextNext=%f ",
+                     points[i].label, distNext, distanceNext, distNextNext, distanceNextNext);
+
+                LOGE(LOG_TAG, "2---揪出离群点：%d", points[i].label);
+                errorPoints.push_back(points[i]);
+                points.erase(points.begin() + i);
+            }
+        } else if (abs(points[i].label - points[i - 1].label) < 4 &&
+                   abs(points[i].label - points[i + 1].label) > 4) {
+            float distPrev = norm(points[i].position - points[i - 1].position);
+            float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 3;
+
+            float distPrevPrev = norm(points[i - 1].position - points[i - 2].position);
+            float distancePrevPrev =
+                    abs(points[i - 1].label - points[i - 2].label) * avgDistance * 1.5;
+            bool isOutlier = (distPrev > distancePrev) && (distPrevPrev <= distancePrevPrev);
+
+            if (isOutlier) {
+                LOGD(LOG_TAG,
+                     "3---detectOutlierPoints label = %d  distPrev=%f  distancePrev=%f  distPrevPrev=%f  distancePrevPrev=%f ",
+                     points[i].label, distPrev, distancePrev, distPrevPrev, distancePrevPrev);
+                LOGE(LOG_TAG, "3---揪出离群点：%d", points[i].label);
+                errorPoints.push_back(points[i]);
+                points.erase(points.begin() + i);
+            }
+        }
+    }
+
 }

@@ -1,5 +1,6 @@
 /**
  * Created by linpeng on 2024/7/4.
+ * 计算同序列的最佳点
  */
 #include "select.hpp"
 
@@ -16,7 +17,9 @@ bool isReasonablePoint(const LightPoint &p1, const LightPoint &p2, float avgDist
     return abs(actualDist - expectedDist) <= tolerance * expectedDist;
 }
 
-
+/**
+ * 选择这个位置最适合的点
+ */
 LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
                            const vector<LightPoint> &samePoints,
                            vector<LightPoint> &errorPoints,
@@ -86,13 +89,13 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
         for (const auto &point: samePoints) {
             if (point.label != bestPoint.label || point.position != bestPoint.position) {
                 errorPoints.push_back(point);
-                LOGE(LOG_TAG, "---塞入异常点位 label =%d position = %d - %d", point.label,
+                LOGE(LOG_TAG, "---塞入异常点位 label =%d position = %f - %f", point.label,
                      point.position.x,
                      point.position.y);
-                circle(src, point.position, 8, Scalar(0, 0, 255), 2);
+                circle(src, point.position, 6, Scalar(0, 0, 255), 2);
                 putText(src, to_string(point.label), point.position,
                         FONT_HERSHEY_SIMPLEX, 0.7,
-                        Scalar(0, 0, 255), 2);
+                        Scalar(0, 0, 255), 1);
             }
         }
     } catch (...) {
@@ -102,162 +105,31 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
     return bestPoint;
 }
 
+/**
+ * 处理得分一致的点，选出合适的点，其他的塞入错误点集合
+ */
 void
 processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoints,
                   vector<LightPoint> &errorPoints,
-                  float avgDistance, map<int, vector<LightPoint>> sameSerialNumMap) {
+                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap) {
+    sort(totalPoints.begin(), totalPoints.end(),
+         [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
+
     Mat outMat = src.clone();
     for (const auto &entry: sameSerialNumMap) {
         vector<LightPoint> indices = entry.second;
         if (indices.size() > 1) {
             LightPoint bestPoint = selectBestPoint(outMat, totalPoints, indices, errorPoints,
                                                    avgDistance);
-            LOGW(LOG_TAG, "---塞入正常点位 label =%d position = %d - %d", bestPoint.label,
+            LOGW(LOG_TAG, "---塞入正常点位 label =%d position = %f - %f", bestPoint.label,
                  bestPoint.position.x,
                  bestPoint.position.y);
-            circle(outMat, bestPoint.position, 8, Scalar(0, 255, 0), 2);
+            circle(outMat, bestPoint.position, 6, Scalar(0, 255, 0), 2);
             putText(outMat, to_string(bestPoint.label), bestPoint.position,
                     FONT_HERSHEY_SIMPLEX, 0.7,
-                    Scalar(0, 255, 0), 2);
+                    Scalar(0, 255, 0), 1);
             totalPoints.push_back(bestPoint);
         }
     }
     outMats.push_back(outMat);
 }
-//vector<LightPoint>
-//processSamePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &processor,
-//                  double averageDistance) {
-//    int sizeWithSame = normalPoints.size();
-//    Mat outMat = src.clone();
-//    vector<LightPoint> processedPoints;
-//    auto findNearestLabels = [&](int currentLabel, int maxDiff = 20) {
-//        vector<pair<int, Point2i>> nearLabels;
-//        vector<pair<int, Point2i>> filteredLabels;
-//        try {
-//            for (const auto &entry: sameSerialNumMap) {
-//                if (abs(entry.first - currentLabel) <= maxDiff && entry.first != currentLabel) {
-//                    if (!entry.second.empty()) {
-//                        nearLabels.emplace_back(entry.first, normalPoints[entry.second[0]].position);
-//                    }
-//                }
-//            }
-//
-//            // 排序标签
-//            sort(nearLabels.begin(), nearLabels.end(),
-//                 [currentLabel](const auto &a, const auto &b) {
-//                     return abs(a.first - currentLabel) < abs(b.first - currentLabel);
-//                 });
-//
-//            // 改进的过滤逻辑
-//            if (nearLabels.size() >= 2) {
-//                for (size_t i = 0; i < nearLabels.size() - 1; ++i) {
-//                    float distance = norm(nearLabels[i].second - nearLabels[i + 1].second);
-//                    int labelDiff = abs(nearLabels[i].first - nearLabels[i + 1].first);
-//                    float expectedDist = labelDiff * averageDistance;
-//
-//                    if (abs(distance - expectedDist) <= averageDistance) {
-//                        if (filteredLabels.empty() ||
-//                            filteredLabels.back().first != nearLabels[i].first) {
-//                            filteredLabels.push_back(nearLabels[i]);
-//                        }
-//                        filteredLabels.push_back(nearLabels[i + 1]);
-//                    }
-//                }
-//            }
-//
-//            // 如果过滤后没有点，至少保留最近的两个点
-//            if (filteredLabels.empty() && nearLabels.size() >= 2) {
-//                filteredLabels.push_back(nearLabels[0]);
-//                filteredLabels.push_back(nearLabels[1]);
-//            }
-//        } catch (...) {
-//            LOGE(LOG_TAG, "异常状态17");
-//        }
-//
-//        return filteredLabels;
-//    };
-//
-//    for (const auto &entry: sameSerialNumMap) {
-//        int serialNum = entry.first;
-//        const vector<int> &indices = entry.second;
-//
-//        if (indices.size() == 1) {
-//            processedPoints.push_back(normalPoints[indices[0]]);
-//        } else {
-//            vector<LightPoint> candidatePoints;
-//            for (int idx: indices) {
-//                candidatePoints.push_back(normalPoints[idx]);
-//            }
-//
-//            auto nearLabels = findNearestLabels(serialNum);
-//            LOGD(LOG_TAG, "serialNum =%d  nearLabels = %d", serialNum, nearLabels.size());
-//            LightPoint bestPoint = candidatePoints[0];
-//            float minScore = std::numeric_limits<float>::max();
-//
-//            for (const auto &p: candidatePoints) {
-//                float score = 0;
-//                int comparedLabels = 0;
-//
-//                for (const auto &nearLabel: nearLabels) {
-//                    if (comparedLabels >= 2) break;  // 只比较最近的两个标签
-//                    float expectedDist = abs(nearLabel.first - serialNum) * averageDistance;
-//                    float actualDist = norm(p.position - nearLabel.second);
-//                    score += abs(actualDist - expectedDist);
-//                    comparedLabels++;
-//                }
-//
-//                if (score < minScore) {
-//                    minScore = score;
-//                    bestPoint = p;
-//                }
-//            }
-//            LOGW(LOG_TAG, "正确点 label = %d  position = %d - %d", bestPoint.label,
-//                 bestPoint.position.x, bestPoint.position.y);
-//            circle(outMat, bestPoint.position, 8, Scalar(0, 255, 0), 2);
-//            putText(outMat, to_string(bestPoint.label), bestPoint.position,
-//                    FONT_HERSHEY_SIMPLEX, 0.7,
-//                    Scalar(0, 255, 0), 2);
-//            processedPoints.push_back(bestPoint);
-//
-//            for (const auto &p: candidatePoints) {
-//                if (p.position.x != bestPoint.position.x || p.position.y != bestPoint.position.y) {
-//                    LOGE(LOG_TAG, "错误点 label = %d   position = %d - %d ", p.label,
-//                         p.position.x, p.position.y);
-//                    circle(outMat, p.position, 8, Scalar(0, 0, 255), 2);
-//                    putText(outMat, to_string(p.label), p.position,
-//                            FONT_HERSHEY_SIMPLEX, 0.7,
-//                            Scalar(0, 0, 255), 2);
-//                    errorSerialVector.push_back(p);
-//                }
-//            }
-//        }
-//    }
-//    // 这里可以根据需要处理abnormalPoints
-//    outMats.push_back(outMat);
-//    LOGW(LOG_TAG,
-//         "delete same = %d  errorSerialVector = %d ",
-//         processedPoints.size() - sizeWithSame, errorSerialVector.size());
-//
-//    return processedPoints;
-//}
-// 使用示例
-//void processTotalPoints(vector<LightPoint>& totalPoints,
-//                        const vector<LightPoint>& samePoints,
-//                        vector<LightPoint>& errorPoints,
-//                        float avgDistance) {
-//    if (samePoints.empty()) return;
-//
-//    LightPoint bestPoint = selectBestPoint(totalPoints, samePoints, errorPoints, avgDistance);
-//
-//    // 在 totalPoints 中插入或更新最佳点
-//    auto it = lower_bound(totalPoints.begin(), totalPoints.end(), bestPoint.label,
-//                               [](const LightPoint& point, int num) {
-//                                   return point.label < num;
-//                               });
-//
-//    if (it != totalPoints.end() && it->label == bestPoint.label) {
-//        *it = bestPoint;  // 更新现有点
-//    } else {
-//        totalPoints.insert(it, bestPoint);  // 插入新点
-//    }
-//}

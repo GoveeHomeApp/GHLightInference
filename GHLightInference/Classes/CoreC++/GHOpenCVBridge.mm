@@ -131,19 +131,27 @@ vector<LightPoint> resLp;
     }
 }
 
-- (void)createLightPointArray:(NSArray *)poArray {
+- (void)createLightPointArray:(NSArray *)poArray withBiz:(NSInteger)bizType {
     for (PredictObject *obj in poArray) {
         if (obj) {
             LightPoint ltp = LightPoint();
-            if (obj.type == 0) {
-                ltp.type = E_GREEN;
-            } else if (obj.type == 1) {
-                ltp.type = E_RED;
-            } else {
-                ltp.type = E_W;
-            }
             ltp.tfScore = obj.score;
             Rect_<int> rect((int)obj.x, (int)obj.y, (int)obj.width, (int)obj.height);
+            if ((int)bizType == TYPE_H682X) {
+                ltp.with = rect.width;
+                ltp.height = rect.height;
+            } else {
+                if (obj.type == 0) {
+                    ltp.type = E_GREEN;
+                } else if (obj.type == 1) {
+                    ltp.type = E_RED;
+                } else {
+                    ltp.type = E_W;
+                }
+            }
+            // 赋值中心点
+            cv::Point center = cv::Point(rect.x + rect.width / 2, rect.y + rect.height / 2);
+            ltp.position = center;
             ltp.tfRect = rect;
             resLp.push_back(ltp);
         }

@@ -8,4 +8,23 @@
 using namespace cv;
 using namespace std;
 
+/**
+ * 查找最接近的中心点
+ * @param lA
+ * @param lB
+ * @param points
+ * @param targetDistance
+ * @return
+ */
+LightPoint findMostLikelyCenter(const LightPoint &lA, const LightPoint &lB, int inferredLightIndex,
+                                int lightType,
+                                unordered_map<int, vector<LightPoint>> &sequenceTypeMap,
+                                double targetDistance);
+
+LightPoint
+findExtensionPointAB2C(const LightPoint &lA, const LightPoint &lB, int inferredLightIndex,
+                       int lightType,
+                       unordered_map<int, vector<LightPoint>> sequenceTypeMap,
+                       double targetDistance);
+
 #endif

@@ -154,85 +154,67 @@ public:
         return dst;
     }
 
+    cv::Mat preprocessImage(const cv::Mat &src, vector<Mat> &outMats) {
 
-    cv::Mat adaptiveThresholdLight(const cv::Mat &src, vector<Mat> &outMats) {
-        cv::Mat gray, enhanced, thresh, dst;
+        cv::Mat gray, hsv, enhanced, thresh, dst;
         cv::cvtColor(src, gray, cv::COLOR_BGR2GRAY);
 
         cv::GaussianBlur(gray, gray, cv::Size(5, 5), 0);
         // 进行直方图均衡化
         cv::Mat equalized;
         cv::equalizeHist(gray, equalized);
-        Mat adaptive = adaptiveThreshold(equalized);
-        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-        cv::morphologyEx(adaptive, thresh, cv::MORPH_DILATE, kernel);
 
-        outMats.push_back(thresh);
-        return thresh;
-    }
-
-    cv::Mat queryRedLight(const cv::Mat &src, vector<Mat> &outMats) {
-        cv::Mat hsv, enhanced, thresh, dst;
         // 转换到HSV色彩空间
         cvtColor(src, hsv, COLOR_BGR2HSV);
 
         // 定义红色和绿色的HSV范围
         Scalar lower_red1(0, 90, 165), upper_red1(8, 255, 255);
         Scalar lower_red2(175, 90, 165), upper_red2(180, 255, 255);
+        Scalar lower_green(64, 90, 165), upper_green(78, 255, 255);
 
         // 创建红色和绿色的掩膜
         Mat mask_red1, mask_red2, mask_green;
         inRange(hsv, lower_red1, upper_red1, mask_red1);
         inRange(hsv, lower_red2, upper_red2, mask_red2);
+        inRange(hsv, lower_green, upper_green, mask_green);
 
         // 合并红色掩膜
         Mat mask_red;
         bitwise_or(mask_red1, mask_red2, mask_red);
-        Mat maskMin = pointErode(mask_red);
-        cv::Mat kernelClose = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(11, 11));
-        cv::Mat kernelOpen = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(1, 1));
 
-        cv::morphologyEx(maskMin, maskMin, cv::MORPH_CLOSE, kernelClose);
-        cv::morphologyEx(maskMin, maskMin, cv::MORPH_OPEN, kernelOpen);
+        // 合并红色和绿色掩膜
+        Mat mask;
+        bitwise_or(mask_red, mask_green, mask);
 
-        outMats.push_back(maskMin);
-        return maskMin;
-    }
+        Mat test1 = adaptiveThreshold(equalized);
 
-    cv::Mat queryGreenLight(const cv::Mat &src, vector<Mat> &outMats) {
-        cv::Mat hsv, enhanced, thresh, dst;
-        // 转换到HSV色彩空间
-        cvtColor(src, hsv, COLOR_BGR2HSV);
+//        outMats.push_back(test1);
 
-        // 定义红色和绿色的HSV范围
-        Scalar lower_green(64, 90, 165), upper_green(78, 255, 255);
+        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+        cv::morphologyEx(test1, thresh, cv::MORPH_DILATE, kernel);
 
-        // 创建红色和绿色的掩膜
-        Mat mask_green;
-        inRange(hsv, lower_green, upper_green, mask_green);
+        cv::Mat kernel2 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(1, 1));
 
-        // 合并红色掩膜
-        Mat maskMin = pointErode(mask_green);
-        cv::Mat kernelClose = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(11, 11));
-        cv::Mat kernelOpen = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(1, 1));
 
-        cv::morphologyEx(maskMin, maskMin, cv::MORPH_CLOSE, kernelClose);
-        cv::morphologyEx(maskMin, maskMin, cv::MORPH_OPEN, kernelOpen);
+        outMats.push_back(thresh);
+
+//        outMats.push_back(mask);
+
+        Mat maskMin = pointErode(mask);
+        cv::Mat kernel3 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(11, 11));
+        cv::morphologyEx(maskMin, maskMin, cv::MORPH_CLOSE, kernel3);
+        cv::morphologyEx(maskMin, maskMin, cv::MORPH_OPEN, kernel2);
 
         outMats.push_back(maskMin);
-        return maskMin;
-    }
 
-    cv::Mat
-    preprocessImage(const cv::Mat &adaptiveMat, const cv::Mat &colorMat, vector<Mat> &outMats) {
-        Mat bitwise,dst;
-        bitwise_and(adaptiveMat, colorMat, bitwise);
+        bitwise_and(maskMin, thresh, dst);
+//        outMats.push_back(dst);
 
+        Mat dst2;
         cv::Mat kernel4 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 1));
-        cv::morphologyEx(bitwise, dst, cv::MORPH_DILATE, kernel4, cv::Point(-1, -1), 2);
-        outMats.push_back(bitwise);
-        outMats.push_back(dst);
-        return dst;
+        cv::morphologyEx(dst, dst2, cv::MORPH_DILATE, kernel4, cv::Point(-1, -1), 2);
+        outMats.push_back(thresh);
+        return dst2;
     }
 
 };
@@ -264,8 +246,12 @@ double distanceP(Point2f p1, Point2f p2);
  */
 Mat morphologyImage(Mat &image, int openKernelSize, int dilateKernelSize, int shape);
 
-Mat thresholdNoodleLamp(Mat &src, vector<Point2f> &pointVector, vector<LightPoint> &lightPoints,
+Mat thresholdNoodleLamp(Mat &src, vector<LightPoint> &lightPoints,
                         vector<Mat> &outMats);
+
+std::vector<std::vector<cv::Point>>
+removeLargeContours(const std::vector<std::vector<cv::Point>> &contours, double threshold = 2.5,
+                    size_t minContourCount = 6);
 
 /**
  * 轮廓大到小排序

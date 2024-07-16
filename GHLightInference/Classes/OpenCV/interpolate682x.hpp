@@ -8,6 +8,12 @@
 
 using namespace cv;
 using namespace std;
+enum class FitType2D {
+    LINEAR_2D,
+    QUADRATIC_2D,
+    CUBIC_2D
+};
+
 /**
  * 获取2个端点
  */
@@ -31,5 +37,13 @@ LightPoint adjustRectToImageBoundary(const LightPoint &rect, const Size &imageSi
 vector<LightPoint> completeRects(const vector<LightPoint> &existingRects,
                                  int totalCount, float targetWidth, float targetHeight,
                                  const Size &imageSize);
+
+vector<LightPoint> interpolateAndExtrapolatePoints(
+        const vector<LightPoint> &input,
+        int min,
+        int max,
+        int fitPoints, float targetWidth, float targetHeight,
+        FitType2D fitType = FitType2D::LINEAR_2D
+);
 
 #endif

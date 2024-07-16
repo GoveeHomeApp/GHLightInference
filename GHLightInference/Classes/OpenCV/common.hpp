@@ -36,24 +36,31 @@ enum LIGHT_TYPE {
     TYPE_H682X = 2,
 };
 
+enum FIND_TYPE {
+    TYPE_SEQUENCE = 0,
+    TYPE_NO_SEQUENCE = 1,
+    TYPE_ERROR = 2,
+};
+
 class LightPoint {
 public:
     cv::Point2f position;
-    double with = 5.0;
-    double height = 5.0;
+    double with = 8.0;
+    double height = 8.0;
     int score = -1;
     double brightness = -1;
     int label = -1;
     CUS_COLOR_TYPE type = E_W;
     LIGHT_STATUS errorStatus = NORMAL;
     float tfScore = 0;
-    cv::Rect tfRect;
+    cv::Rect2i tfRect;
     cv::RotatedRect rotatedRect;
     std::vector<int> neighbors;
     float localDensity;  // 新增：局部密度
     cv::Point startPoint;  //
     cv::Point endPoint;  //
     bool isInterpolate = false;
+    FIND_TYPE findType = TYPE_SEQUENCE;
 public:
     ~LightPoint() {
         // 析构函数，释放资源
@@ -67,6 +74,10 @@ public:
         position = point;
         with = withSet;
         height = heightset;
+    }
+
+    LightPoint(int labelSet) {
+        label = labelSet;
     }
 
     LightPoint(LIGHT_STATUS errorStatusSet) {
@@ -113,8 +124,8 @@ public:
             }
             roi.width = this->with;
             roi.height = this->height;
-            if (roi.width < 5) roi.width = 5;
-            if (roi.height < 5) roi.height = 5;
+            if (roi.width < 8.0) roi.width = 8.0;
+            if (roi.height < 8.0) roi.height = 8.0;
 //        LOGD(LOG_TAG, "roi = %d x %d, w = %d, h = %d, src = %d x %d", roi.x, roi.y, roi.width,
 //             roi.height, src.cols, src.rows);
             region = src(roi);
