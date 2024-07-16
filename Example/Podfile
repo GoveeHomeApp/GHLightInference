@@ -11,7 +11,7 @@ source 'https://github.com/CocoaPods/Specs.git'
 
 target 'GHLightInference_Example' do
   pod 'GHLightInference', :path => '../'
-  pod 'LibTorch-Lite', '~>1.10.0'
+  pod 'LibTorch-Lite', '~>1.13.0.1'
   pod 'HandyJSON', :git => 'git@github.com:alibaba/HandyJSON.git', :tag => '5.0.2'
   
 end
