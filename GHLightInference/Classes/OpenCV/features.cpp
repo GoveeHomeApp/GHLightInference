@@ -412,7 +412,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 
         int totalCount = getIcNum(); // 期望的总矩形数
         float targetWidth = 20;
-        float targetHeight = 240;
+        float targetHeight = 270;
 
         if (getIcNum() > 10) {
             vector<LightPoint> pointMin;

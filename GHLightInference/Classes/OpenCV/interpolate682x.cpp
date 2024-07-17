@@ -111,8 +111,8 @@ extrapolatePoint(const vector<Point2f> &points, int labelDiff, FitType2D fitType
 //    LOGD(LOG_TAG, "sizeLimit  = %d, %d   xtrapolatedd %f - %f", sizeLimit.width, sizeLimit.height,
 //         extrapolated_x, extrapolated_y);
     // Apply smooth limiting to the extrapolated point
-    extrapolated_x = smoothLimit(extrapolated_x, 0, static_cast<double>(sizeLimit.width - 1));
-    extrapolated_y = smoothLimit(extrapolated_y, 0,static_cast<double>(sizeLimit.height - 1));
+    extrapolated_x = smoothLimit(extrapolated_x, 50, static_cast<double>(sizeLimit.width - 1));
+    extrapolated_y = smoothLimit(extrapolated_y, 50, static_cast<double>(sizeLimit.height - 1));
 
     return Point2f(extrapolated_x, extrapolated_y);
 }
@@ -193,6 +193,8 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
         auto pair = getEndPoints(lk.rotatedRect);
         lk.startPoint = pair.first;
         lk.endPoint = pair.second;
+        lk.with = targetWidth;
+        lk.height = targetHeight;
         result.push_back(lk);
         existingLabels.insert(lk.label);
     }
@@ -227,8 +229,8 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
                                                                  result[i].rotatedRect.size.height),
                                                  result[i].rotatedRect.angle);
                     lp.tfRect = lp.rotatedRect.boundingRect();
-                    lp.with = result[i].with;
-                    lp.height = result[i].height;
+                    lp.with = targetWidth;
+                    lp.height = targetHeight;
                     auto pair = getEndPoints(lp.rotatedRect);
                     lp.startPoint = pair.first;
                     lp.endPoint = pair.second;
@@ -261,7 +263,7 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
                 points.push_back(result[i].position);
             }
 
-            for (int i = result.front().label - 1; i >= 0; --i) {
+            for (int i = result.front().label - 1; i >= min; --i) {
                 if (existingLabels.find(i) == existingLabels.end()) {
                     //const vector<cv::Point2f>& points, int labelDiff, FitType2D fitType, cv::Size sizeLimit
                     Point2f extrapolatedPoint = extrapolatePoint(points,
@@ -270,17 +272,16 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
                     LightPoint lp = LightPoint();
                     lp.label = i;
                     lp.position = extrapolatedPoint;
-                    RotatedRect rotatedRect;
                     LightPoint reference = result.front();
-                    rotatedRect = RotatedRect(extrapolatedPoint,
-                                              Size2f(reference.rotatedRect.size.width,
-                                                     reference.rotatedRect.size.height),
-                                              reference.rotatedRect.angle);
+                    RotatedRect rotatedRect = RotatedRect(extrapolatedPoint,
+                                                          Size2f(reference.rotatedRect.size.width,
+                                                                 reference.rotatedRect.size.height),
+                                                          reference.rotatedRect.angle);
 
                     lp.rotatedRect = rotatedRect;
                     lp.tfRect = lp.rotatedRect.boundingRect();
-                    lp.with = reference.with;
-                    lp.height = reference.height;
+                    lp.with = targetWidth;
+                    lp.height = targetHeight;
                     auto pair = getEndPoints(lp.rotatedRect);
                     lp.startPoint = pair.first;
                     lp.endPoint = pair.second;
@@ -327,8 +328,8 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
 
                     lp.rotatedRect = rotatedRect;
                     lp.tfRect = lp.rotatedRect.boundingRect();
-                    lp.with = reference.with;
-                    lp.height = reference.height;
+                    lp.with = targetWidth;
+                    lp.height = targetHeight;
                     auto pair = getEndPoints(lp.rotatedRect);
                     lp.startPoint = pair.first;
                     lp.endPoint = pair.second;
