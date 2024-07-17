@@ -197,10 +197,53 @@ public class PrePostProcessor : NSObject {
                 }
             case "blue":
                 break
+            case "light":
+                let bbox = UIView(frame: pred.rect)
+                bbox.backgroundColor = UIColor.clear
+                bbox.layer.borderColor = UIColor.purple.cgColor
+                bbox.layer.borderWidth = 1
+                let bbox1 = CrossDiagonalView(frame: pred.rect)
+                bbox1.backgroundColor = UIColor.clear
+                bbox1.layoutIfNeeded()
+                // 如何准确绘制 识别后标底
+                if pred.score > 0.2 {
+                    imageView.addSubview(bbox)
+                    imageView.addSubview(bbox1)
+                }
+                break
             default:
                 break
             }
         }
     }
 
+}
+
+class CrossDiagonalView: UIView {
+
+    override func draw(_ rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+
+        // 第一条对角线：左下到右上
+        let startPoint1 = CGPoint(x: rect.minX, y: rect.maxY)
+        let endPoint1 = CGPoint(x: rect.maxX, y: rect.minY)
+
+        // 第二条对角线：左上到右下
+        let startPoint2 = CGPoint(x: rect.minX, y: rect.minY)
+        let endPoint2 = CGPoint(x: rect.maxX, y: rect.maxY)
+
+        // 设置线条属性
+        context.setLineWidth(1.0)
+        context.setStrokeColor(UIColor.cyan.cgColor)
+
+        // 绘制第一条对角线
+        context.move(to: startPoint1)
+        context.addLine(to: endPoint1)
+        context.strokePath()
+
+        // 清除路径，以便重新开始绘制第二条对角线
+        context.move(to: startPoint2)
+        context.addLine(to: endPoint2)
+        context.strokePath()
+    }
 }
