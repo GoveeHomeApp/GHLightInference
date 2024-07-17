@@ -16,16 +16,16 @@ float distance(const Point2f &p1, const Point2f &p2) {
 }
 
 
-std::pair<cv::Point2f, cv::Point2f> getEndPoints(const cv::RotatedRect &rect) {
-    cv::Point2f vertices[4];
+pair<Point2f, Point2f> getEndPoints(const RotatedRect &rect) {
+    Point2f vertices[4];
     rect.points(vertices);
 
 
     // Calculate edge lengths
-    float edge1 = cv::norm(vertices[1] - vertices[0]);
-    float edge2 = cv::norm(vertices[2] - vertices[1]);
+    float edge1 = norm(vertices[1] - vertices[0]);
+    float edge2 = norm(vertices[2] - vertices[1]);
 
-    cv::Point2f midpoint1, midpoint2;
+    Point2f midpoint1, midpoint2;
     if (edge1 < edge2) {
         // Short edges are [0]-[1] and [2]-[3]
         midpoint1 = (vertices[0] + vertices[1]) * 0.5f;
@@ -37,7 +37,7 @@ std::pair<cv::Point2f, cv::Point2f> getEndPoints(const cv::RotatedRect &rect) {
     }
 
     // Determine which midpoint is on top
-    cv::Point2f topCenter, bottomCenter;
+    Point2f topCenter, bottomCenter;
     if (midpoint1.y < midpoint2.y) {
         topCenter = midpoint1;
         bottomCenter = midpoint2;
@@ -51,44 +51,47 @@ std::pair<cv::Point2f, cv::Point2f> getEndPoints(const cv::RotatedRect &rect) {
 
 
 double sigmoid(double x, double scale = 10.0) {
-    return 1.0 / (1.0 + std::exp(-x / scale));
+    return 1.0 / (1.0 + exp(-x / scale));
 }
 
 double smoothLimit(double value, double min, double max, double transitionRange = 0.1) {
+    if (value > min && value < max) {
+        return value;
+    }
     double range = max - min;
     double scaledValue = (value - min) / range;
     double smoothedValue = sigmoid(scaledValue * 2 - 1);
     return min + smoothedValue * range * (1 - 2 * transitionRange) + range * transitionRange;
 }
 
-cv::Point2f
-extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType2D fitType,
-                 cv::Size sizeLimit) {
-    if (points.size() < 2) return cv::Point2f(0, 0); // Not enough points to extrapolate
-    std::vector<double> x, y;
+Point2f
+extrapolatePoint(const vector<Point2f> &points, int labelDiff, FitType2D fitType,
+                 Size sizeLimit = Size(1450, 1950)) {
+    if (points.size() < 2) return Point2f(0, 0); // Not enough points to extrapolate
+    vector<double> x, y;
     for (const auto &p: points) {
         x.push_back(p.x);
         y.push_back(p.y);
     }
 
-    cv::Mat A, coeffs;
+    Mat A, coeffs;
     int degree = static_cast<int>(fitType);
 
     // Prepare matrices for polynomial fitting
-    A = cv::Mat::zeros(x.size(), degree + 1, CV_64F);
+    A = Mat::zeros(x.size(), degree + 1, CV_64F);
     for (int i = 0; i < A.rows; ++i) {
         for (int j = 0; j <= degree; ++j) {
-            A.at<double>(i, j) = std::pow(x[i], j);
+            A.at<double>(i, j) = pow(x[i], j);
         }
     }
 
-    cv::Mat y_mat(y);
-    cv::solve(A, y_mat, coeffs, cv::DECOMP_QR);
+    Mat y_mat(y);
+    solve(A, y_mat, coeffs, DECOMP_QR);
 
     // Calculate the direction vector
     double dx = x.back() - x.front();
     double dy = y.back() - y.front();
-    double length = std::sqrt(dx * dx + dy * dy);
+    double length = sqrt(dx * dx + dy * dy);
 
     // Normalize the direction vector
     if (length > 1e-6) {  // Avoid division by zero
@@ -111,7 +114,7 @@ extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType2
     if (degree > 0) {
         double fitted_y = 0;
         for (int i = 0; i <= degree; ++i) {
-            fitted_y += coeffs.at<double>(i) * std::pow(extrapolated_x, i);
+            fitted_y += coeffs.at<double>(i) * pow(extrapolated_x, i);
         }
 
         // Blend the linear extrapolation with the polynomial fit
@@ -119,11 +122,36 @@ extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType2
         extrapolated_y = alpha * extrapolated_y + (1 - alpha) * fitted_y;
     }
 
+//    LOGD(LOG_TAG, "sizeLimit  = %d, %d   xtrapolatedd %f - %f", sizeLimit.width, sizeLimit.height,
+//         extrapolated_x, extrapolated_y);
     // Apply smooth limiting to the extrapolated point
-//    extrapolated_x = smoothLimit(extrapolated_x, 0, static_cast<double>(sizeLimit.width - 1));
-//    extrapolated_y = smoothLimit(extrapolated_y, 0, static_cast<double>(sizeLimit.height - 1));
+    extrapolated_x = smoothLimit(extrapolated_x, 0, static_cast<double>(sizeLimit.width - 1));
+    extrapolated_y = smoothLimit(extrapolated_y, 0,static_cast<double>(sizeLimit.height - 1));
 
-    return cv::Point2f(extrapolated_x, extrapolated_y);
+    return Point2f(extrapolated_x, extrapolated_y);
+}
+
+vector<LightPoint> translateRotatedRects(const vector<LightPoint> &lps, float dx, float dy) {
+    vector<LightPoint> translatedLps;
+    translatedLps.reserve(lps.size());
+
+    for (const auto &lp: lps) {
+        LightPoint newLp = LightPoint(lp.label);
+
+        RotatedRect rect = lp.rotatedRect;
+        // 创建一个新的RotatedRect，只更新中心点的坐标
+        Point2f newCenter(rect.center.x + dx, rect.center.y + dy);
+        RotatedRect translatedRect(newCenter, rect.size, rect.angle);
+        newLp.position = newCenter;
+        newLp.rotatedRect = translatedRect;
+        newLp.with = translatedRect.size.width;
+        newLp.height = translatedRect.size.height;
+        auto pair = getEndPoints(lp.rotatedRect);
+        newLp.startPoint = pair.first;
+        newLp.endPoint = pair.second;
+        translatedLps.push_back(newLp);
+    }
+    return translatedLps;
 }
 
 vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
@@ -151,6 +179,7 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
         lp.endPoint = pair.second;
         input.push_back(lp);
     }
+
     float rectLen = 0;
     for (const auto &rect: input) {
         float curLen = cv::max(rect.rotatedRect.size.width, rect.rotatedRect.size.height);
@@ -160,8 +189,13 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
 
     targetHeight = cv::min(cv::max(rectLen, targetHeight / 2), targetHeight * 2);
 
+    float tranW = (1500 - src.rows) / 2.0f;
+    float tranH = (2000 - src.cols) / 2.0f;
+    LOGD(LOG_TAG, "tranW = %f, tranH = %f  src = %d - %d", tranW, tranH, src.rows, src.cols);
+    vector<LightPoint> transInput = translateRotatedRects(input, tranW, tranH);
+
     // 首先，添加所有输入点并记录它们的标签
-    for (size_t k = 0; k < input.size(); ++k) {
+    for (size_t k = 0; k < transInput.size(); ++k) {
         LightPoint lk = input[k];
         if (lk.rotatedRect.size.width > lk.rotatedRect.size.height) {
             lk.rotatedRect = RotatedRect(lk.rotatedRect.center, Size2f(targetHeight, targetWidth),
@@ -179,31 +213,32 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
 
     LOGD(LOG_TAG, "interpolateAndExtrapolatePoints %d   result= %d", maxLabel, result.size());
     // 对结果进行排序
-    std::sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
+    sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
         return a.label < b.label;
     });
 
     // 插值
-    std::vector<LightPoint> interpolated;
+    vector<LightPoint> interpolated;
     for (size_t i = 0; i < result.size() - 1; ++i) {
         int start_label = result[i].label;
         int end_label = result[i + 1].label;
         int gap = end_label - start_label;
 
         if (gap > 1) {
-            cv::Point2f start_point = result[i].position;
-            cv::Point2f end_point = result[i + 1].position;
-            cv::Point2f step = (end_point - start_point) / static_cast<float>(gap);
+            Point2f start_point = result[i].position;
+            Point2f end_point = result[i + 1].position;
+            Point2f step = (end_point - start_point) / static_cast<float>(gap);
 
             for (int j = 1; j < gap; ++j) {
                 int new_label = start_label + j;
                 if (existingLabels.find(new_label) == existingLabels.end()) {
-                    cv::Point2f new_point = start_point + step * static_cast<float>(j);
+                    Point2f new_point = start_point + step * static_cast<float>(j);
 
                     LightPoint lp = LightPoint();
                     lp.label = new_label;
                     lp.position = new_point;
-                    lp.rotatedRect = RotatedRect(new_point, Size(result[i].with, result[i].height),
+                    lp.rotatedRect = RotatedRect(new_point, Size(result[i].rotatedRect.size.width,
+                                                                 result[i].rotatedRect.size.height),
                                                  result[i].rotatedRect.angle);
                     lp.tfRect = lp.rotatedRect.boundingRect();
                     lp.with = result[i].with;
@@ -226,7 +261,7 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
          input.size(),
          result.size() - input.size(), interpolated.size());
 
-    std::sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
+    sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
         return a.label < b.label;
     });
 
@@ -235,18 +270,17 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
         // 前向外推
         LOGD(LOG_TAG, "补充外推： start = %d  min = %d", result.front().label, min);
         if (result.front().label > min) {
-            vector<cv::Point2f> points;
+            vector<Point2f> points;
             for (int i = 0; i < cv::min(fitPoints, static_cast<int>(result.size())); ++i) {
                 points.push_back(result[i].position);
             }
 
             for (int i = result.front().label - 1; i >= 0; --i) {
                 if (existingLabels.find(i) == existingLabels.end()) {
-                    //const std::vector<cv::Point2f>& points, int labelDiff, FitType2D fitType, cv::Size sizeLimit
-                    cv::Point2f extrapolatedPoint = extrapolatePoint(points,
-                                                                     result.front().label - i,
-                                                                     fitType,
-                                                                     Size(src.cols, src.rows));
+                    //const vector<cv::Point2f>& points, int labelDiff, FitType2D fitType, cv::Size sizeLimit
+                    Point2f extrapolatedPoint = extrapolatePoint(points,
+                                                                 result.front().label - i,
+                                                                 fitType);
                     LightPoint lp = LightPoint();
                     lp.label = i;
                     lp.position = extrapolatedPoint;
@@ -264,7 +298,8 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
                     auto pair = getEndPoints(lp.rotatedRect);
                     lp.startPoint = pair.first;
                     lp.endPoint = pair.second;
-                    LOGD(LOG_TAG, "1 外推： label = %d  position= %f - %f", lp.label, lp.position.x,
+                    LOGD(LOG_TAG, "前向外推： label = %d  position= %f - %f", lp.label,
+                         lp.position.x,
                          lp.position.y);
                     result.emplace_back(lp);
                     existingLabels.insert(i);
@@ -280,7 +315,7 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
         LOGD(LOG_TAG, "2 补充外推： end = %d  maxLabel= %d", result.back().label, maxLabel);
         // 后向外推
         if (result.back().label < maxLabel) {
-            std::vector<cv::Point2f> points;
+            vector<Point2f> points;
             for (int i = 0; i < result.size(); ++i) {
                 LOGD(LOG_TAG, "points push %d", result[i].label);
                 points.push_back(result[i].position);
@@ -288,10 +323,9 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
 
             for (int i = result.back().label + 1; i <= maxLabel; ++i) {
                 if (existingLabels.find(i) == existingLabels.end()) {
-                    cv::Point2f extrapolatedPoint = extrapolatePoint(points,
-                                                                     i - result.back().label,
-                                                                     fitType,
-                                                                     Size(src.cols, src.rows));
+                    Point2f extrapolatedPoint = extrapolatePoint(points,
+                                                                 i - result.back().label,
+                                                                 fitType);
                     LightPoint lp = LightPoint();
                     lp.label = i;
                     lp.position = extrapolatedPoint;
@@ -312,7 +346,8 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
                     auto pair = getEndPoints(lp.rotatedRect);
                     lp.startPoint = pair.first;
                     lp.endPoint = pair.second;
-                    LOGD(LOG_TAG, "外推： label = %d  position= %f - %f", lp.label, lp.position.x,
+                    LOGD(LOG_TAG, "后向外推： label = %d  position= %f - %f", lp.label,
+                         lp.position.x,
                          lp.position.y);
                     result.emplace_back(lp);
                     existingLabels.insert(i);
@@ -327,7 +362,7 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
     }
 
     // 最后再次对结果进行排序
-    std::sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
+    sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
         return a.label < b.label;
     });
     LOGD(LOG_TAG, "线性补充：result = %d  input = %d  补充：%d", result.size(), input.size(),

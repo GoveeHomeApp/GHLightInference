@@ -179,7 +179,12 @@ void drawPointsMatOut(Mat &src, LampBeadsProcessor &processor, vector<Mat> &outM
     try {
         //输出一张好点图
         vector<Point2f> points;
-        Mat dstCircle = src.clone();
+        Mat dstCircle;
+        if (lightType == TYPE_H682X) {
+            dstCircle = Mat(2000, 1500, src.type());
+        } else {
+            dstCircle = src.clone();
+        }
         for (int i = 0; i < pPoints.size(); i++) {
             LightPoint lpoint = pPoints[i];
             if (!lpoint.rotatedRect.size.empty()) {
@@ -406,8 +411,8 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
         int size = processor.totalPoints.size();
 
         int totalCount = getIcNum(); // 期望的总矩形数
-        float targetWidth = 14;
-        float targetHeight = 12 * getIcNum();
+        float targetWidth = 20;
+        float targetHeight = 240;
 
         if (getIcNum() > 10) {
             vector<LightPoint> pointMin;
@@ -427,6 +432,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
             pointMax = interpolateAndExtrapolatePoints(src, pointMax, getIcNum() / 2,
                                                        getIcNum(), 2, targetWidth,
                                                        targetHeight);
+            LOGW(LOG_TAG, "2 pointMax = %d pointMin = %d", pointMax.size(), pointMin.size());
             // 合并两个集合
             vector<LightPoint> mergedVec;
             mergedVec.reserve(pointMin.size() + pointMax.size()); // 预先分配足够的空间
@@ -439,7 +445,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
                                                                     2, targetWidth,
                                                                     targetHeight);
         }
-        LOGD(LOG_TAG, "h682x推断条数 size= %d add = %d ", size,
+        LOGD(LOG_TAG, "h682x推断条数 size = %d add = %d ", size,
              processor.totalPoints.size() - size);
     }
 
