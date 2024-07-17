@@ -168,3 +168,17 @@ findExtensionPointAB2C(const LightPoint &lA, const LightPoint &lB, int inferredL
         return LightPoint(EMPTY_POINT);
     }
 }
+
+double sigmoid(double x, double scale) {
+    return 1.0 / (1.0 + exp(-x / scale));
+}
+
+double smoothLimit(double value, double min, double max, double transitionRange) {
+    if (value > min && value < max) {
+        return value;
+    }
+    double range = max - min;
+    double scaledValue = (value - min) / range;
+    double smoothedValue = sigmoid(scaledValue * 2 - 1);
+    return min + smoothedValue * range * (1 - 2 * transitionRange) + range * transitionRange;
+}

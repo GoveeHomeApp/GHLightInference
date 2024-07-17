@@ -9,33 +9,34 @@
 #include "inferredp.hpp"
 
 
-cv::Point2f
-extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType fitType) {
-    if (points.size() < 2) return cv::Point2f(0, 0);  // Not enough points to extrapolate
-    std::vector<double> x, y;
+Point2f
+extrapolatePoint(const vector<Point2f> &points, int labelDiff, FitType fitType,
+                 Size sizeLimit = Size(940, 1200)) {
+    if (points.size() < 2) return Point2f(0, 0); // Not enough points to extrapolate
+    vector<double> x, y;
     for (const auto &p: points) {
         x.push_back(p.x);
         y.push_back(p.y);
     }
 
-    cv::Mat A, coeffs;
+    Mat A, coeffs;
     int degree = static_cast<int>(fitType);
 
     // Prepare matrices for polynomial fitting
-    A = cv::Mat::zeros(x.size(), degree + 1, CV_64F);
+    A = Mat::zeros(x.size(), degree + 1, CV_64F);
     for (int i = 0; i < A.rows; ++i) {
         for (int j = 0; j <= degree; ++j) {
-            A.at<double>(i, j) = std::pow(x[i], j);
+            A.at<double>(i, j) = pow(x[i], j);
         }
     }
 
-    cv::Mat y_mat(y);
-    cv::solve(A, y_mat, coeffs, cv::DECOMP_QR);
+    Mat y_mat(y);
+    solve(A, y_mat, coeffs, DECOMP_QR);
 
     // Calculate the direction vector
     double dx = x.back() - x.front();
     double dy = y.back() - y.front();
-    double length = std::sqrt(dx * dx + dy * dy);
+    double length = sqrt(dx * dx + dy * dy);
 
     // Normalize the direction vector
     if (length > 1e-6) {  // Avoid division by zero
@@ -58,7 +59,7 @@ extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType 
     if (degree > 0) {
         double fitted_y = 0;
         for (int i = 0; i <= degree; ++i) {
-            fitted_y += coeffs.at<double>(i) * std::pow(extrapolated_x, i);
+            fitted_y += coeffs.at<double>(i) * pow(extrapolated_x, i);
         }
 
         // Blend the linear extrapolation with the polynomial fit
@@ -66,7 +67,13 @@ extrapolatePoint(const std::vector<cv::Point2f> &points, int labelDiff, FitType 
         extrapolated_y = alpha * extrapolated_y + (1 - alpha) * fitted_y;
     }
 
-    return cv::Point2f(extrapolated_x, extrapolated_y);
+//    LOGD(LOG_TAG, "sizeLimit  = %d, %d   xtrapolatedd %f - %f", sizeLimit.width, sizeLimit.height,
+//         extrapolated_x, extrapolated_y);
+    // Apply smooth limiting to the extrapolated point
+    extrapolated_x = smoothLimit(extrapolated_x, 0, static_cast<double>(sizeLimit.width - 1));
+    extrapolated_y = smoothLimit(extrapolated_y, 0, static_cast<double>(sizeLimit.height - 1));
+
+    return Point2f(extrapolated_x, extrapolated_y);
 }
 
 vector<LightPoint> interpolateAndExtrapolatePoints(

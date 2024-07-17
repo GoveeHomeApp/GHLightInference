@@ -10,11 +10,11 @@
  */
 #include "interpolate682x.hpp"
 #include <cmath>
+#include "inferredp.hpp"
 
 float distance(const Point2f &p1, const Point2f &p2) {
     return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
 }
-
 
 pair<Point2f, Point2f> getEndPoints(const RotatedRect &rect) {
     Point2f vertices[4];
@@ -49,20 +49,6 @@ pair<Point2f, Point2f> getEndPoints(const RotatedRect &rect) {
     return {topCenter, bottomCenter};
 }
 
-
-double sigmoid(double x, double scale = 10.0) {
-    return 1.0 / (1.0 + exp(-x / scale));
-}
-
-double smoothLimit(double value, double min, double max, double transitionRange = 0.1) {
-    if (value > min && value < max) {
-        return value;
-    }
-    double range = max - min;
-    double scaledValue = (value - min) / range;
-    double smoothedValue = sigmoid(scaledValue * 2 - 1);
-    return min + smoothedValue * range * (1 - 2 * transitionRange) + range * transitionRange;
-}
 
 Point2f
 extrapolatePoint(const vector<Point2f> &points, int labelDiff, FitType2D fitType,
