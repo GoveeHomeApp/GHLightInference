@@ -287,7 +287,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 self.preImageArray.append(scaleImage)
                 #if DEBUG
                 self.saveImageView.image = scaleImage
-//                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
+                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                 #endif
                 DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
                     self.capFinishHandler?()
