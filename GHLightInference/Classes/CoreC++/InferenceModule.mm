@@ -59,11 +59,16 @@ const int output_size_682 = 25200*6;
         NSMutableArray* results = [[NSMutableArray alloc] init];
         if (self.nc == 1) {
             for (int i = 0; i < output_size_682; i++) {
-                [results addObject:@(floatBuffer[i])];
+                // 判断张量总数
+                if (i <= tensor.numel()) {
+                    [results addObject:@(floatBuffer[i])];
+                }
             }
         } else {
             for (int i = 0; i < output_size; i++) {
-                [results addObject:@(floatBuffer[i])];
+                if (i <= tensor.numel()) {
+                    [results addObject:@(floatBuffer[i])];
+                }
             }
         }
         return [results copy];

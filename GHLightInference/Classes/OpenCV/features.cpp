@@ -297,7 +297,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 
     if (lightType == TYPE_H70CX_3D || lightType == TYPE_H70CX_2D) {
         detectOutlierPoints(processor.totalPoints, errorSerialVector, averageDistance);
-        removeOutliersDBSCAN(processor.totalPoints, 0.1, 2, 0.8);
+//        removeOutliersDBSCAN(processor.totalPoints, 0.1, 2, 0.8);
     }
 
     if (processor.totalPoints.size() > 2) {
