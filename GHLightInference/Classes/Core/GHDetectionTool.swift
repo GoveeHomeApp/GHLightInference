@@ -471,6 +471,11 @@ extension GHDetectionTool {
                     switch self.bizType {
                     case 2:
                         // 6820系列
+                        if poArr.count < 1 { // 少于5个 直接认为失败
+                            self.doneNotice?(nil)
+                            self.transaction = nil
+                            return
+                        }
                         GHOpenCVBridge.shareManager().createLightPointArray(poArr, withBiz: self.bizType)
                         break
                     default:
