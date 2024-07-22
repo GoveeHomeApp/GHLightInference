@@ -82,8 +82,6 @@ LightPoint meanColor(Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColor
  */
 LampBeadsProcessor sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points);
 
-Mat alignImg(Mat &src, Mat &trans, bool back4Matrix);
-
 /**
  * 获取区域颜色集合
  */

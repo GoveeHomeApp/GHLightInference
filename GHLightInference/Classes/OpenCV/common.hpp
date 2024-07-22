@@ -1,5 +1,8 @@
 #pragma once
-
+#ifdef NO
+#undef NO
+#define NO MY_NO
+#endif
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/mat.hpp>
 #include <cmath>
@@ -45,8 +48,8 @@ enum FIND_TYPE {
 class LightPoint {
 public:
     cv::Point2f position;
-    double with = 9.0;
-    double height = 9.0;
+    double with = 7.0;
+    double height = 7.0;
     int score = -1;
     double brightness = -1;
     int label = -1;
@@ -114,8 +117,8 @@ public:
             float x = position.x; // 指定坐标x
             float y = position.y; // 指定坐标y
             roi = cv::Rect(x, y, with, height);
-            if (roi.width < 9.0) roi.width = 9.0;
-            if (roi.height < 9.0) roi.height = 9.0;
+            if (roi.width < 7.0) roi.width = 7.0;
+            if (roi.height < 7.0) roi.height = 7.0;
             cv::Rect2i safeR = safeRect(roi, src.size());
             region = src(safeR);
         } catch (...) {

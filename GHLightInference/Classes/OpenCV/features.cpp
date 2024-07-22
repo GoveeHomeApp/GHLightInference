@@ -5,6 +5,7 @@
 #include "interpolate682x.hpp"
 #include "interpolate70cx.hpp"
 #include "inferredp.hpp"
+#include "aligner2.cpp"
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <opencv2/imgproc/types_c.h>
@@ -27,11 +28,8 @@ vector<vector<int>> scoreVV = {{0, 1,   2},
                                {0, 135, 263},
                                {0, 264, 520}};
 
-//对齐精度
-double termination_eps2 = 1e-4;
-int number_of_iterations2 = 80;
+
 int lightType = 0;
-int motionTypeSet = MOTION_HOMOGRAPHY;
 //得分点集合
 vector<LightPoint> pPoints;
 vector<Point2f> pPointXys;
@@ -43,6 +41,8 @@ unordered_map<int, Mat> frameStepMap;
 */
 vector<LightPoint> errorSerialVector;
 unordered_map<int, vector<LightPoint>> sequenceTypeMap;
+
+EnhancedChristmasTreeAligner aligner;
 
 /**
  * 对齐并输出640正方形图像
@@ -56,14 +56,16 @@ Mat alignResize(int frameStep, Mat &originalMat) {
     Size newSize(640, 640);
     if (frameStep > STEP_VALID_FRAME_START) {
         Mat originalMatClone = originalMat.clone();
-        alignMat = alignImg(frameStepMap[STEP_VALID_FRAME_START], originalMatClone, false);
+        alignMat = aligner.alignImage(frameStepMap[STEP_VALID_FRAME_START], originalMatClone);
         if (alignMat.empty()) {
             return alignMat;
         }
+        LOGD(LOG_TAG, "alignResize %d-%d", alignMat.rows, alignMat.cols);
         resize(alignMat, srcResize, newSize);
         frameStepMap[frameStep] = alignMat.clone();
     } else {
         release();
+        aligner = EnhancedChristmasTreeAligner();
         resize(originalMat.clone(), srcResize, newSize);
         alignMat = originalMat.clone();
         frameStepMap[frameStep] = alignMat.clone();
@@ -467,8 +469,9 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
     vector<int> sameColorScore = getSameColorVector();
     //消除
     if (lightType != TYPE_H682X) {
+        Mat out = src.clone();
         vector<int> eraseVector = polyPoints(pPointXys, 3, 2.3);
-//        outMats.push_back(out);
+        outMats.push_back(out);
         sort(eraseVector.begin(), eraseVector.end(), std::greater<int>());
         for (int index: eraseVector) {
             auto erasePoint = pPoints.begin() + index;
@@ -1145,77 +1148,6 @@ LightPoint inferredAB2Next(LightPoint &A, LightPoint &B, bool findErrorPoints) {
     return inferredPoint;
 }
 
-/**
- * 对齐图片
- */
-Mat alignImg(Mat &src, Mat &trans, bool back4Matrix) {
-    if (src.empty()) {
-        LOGE(LOG_TAG, "===========src empty===========");
-        return trans;
-    }
-    if (trans.empty()) {
-        LOGE(LOG_TAG, "===========trans empty===========");
-        return src;
-    }
-    Mat alignedImg;
-    try {
-        Mat warp_matrix;
-        if (motionTypeSet == MOTION_AFFINE) {
-            warp_matrix = Mat::eye(2, 3, CV_32F);
-        } else if (motionTypeSet == MOTION_HOMOGRAPHY) {//MOTION_HOMOGRAPHY 耗时更久
-            warp_matrix = Mat::eye(3, 3, CV_32F);
-        } else {
-            //MOTION_EUCLIDEAN
-        }
-        // 降低图像分辨率
-        // 创建掩膜，指定搜索区域
-        Mat mask = Mat::zeros(trans.size(), CV_8UC1);
-
-        // 拷贝点向量
-        std::vector<cv::Point2f> copiedPoints = pPointXys;
-        vector<int> eraseVector = polyPoints(copiedPoints, 3, 2.3);
-        // 获取最小外接矩形
-        cv::Rect2i boundingRect = cv::boundingRect(copiedPoints);
-
-        Rect2i searchRegion = safeRect(boundingRect, src.size());
-
-        int area = searchRegion.width * searchRegion.height;
-        if (area < 25 && !searchRegion.empty()) {
-            // 假设我们只想在目标图像的一个特定区域内搜索
-            LOGE(LOG_TAG, "area < 25,use hard rect");
-            searchRegion = Rect(120, 80, 400, 480); // x, y, width, height
-        }
-
-        rectangle(mask, searchRegion, Scalar::all(255), FILLED);
-
-        Mat im1Src, im2Trans;
-        // 转换为灰度图
-        cvtColor(src, im1Src, CV_BGR2GRAY);
-
-        cvtColor(trans, im2Trans, CV_BGR2GRAY);
-
-        TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS, number_of_iterations2,
-                              termination_eps2);
-        double ecc = findTransformECC(im1Src, im2Trans, warp_matrix, motionTypeSet,
-                                      criteria, mask);//, mask
-        double alignmentQuality = 1.0 / (1.0 + ecc);
-        LOGW(LOG_TAG, "ecc = %f  alignmentQuality = %f", ecc, alignmentQuality);
-        if (motionTypeSet == MOTION_HOMOGRAPHY) {
-            warpPerspective(trans, alignedImg, warp_matrix, trans.size(),
-                            INTER_LINEAR + WARP_INVERSE_MAP);
-        } else {
-            warpAffine(trans, alignedImg, warp_matrix, trans
-                    .size(), INTER_LINEAR + WARP_INVERSE_MAP);
-        }
-        if (back4Matrix) {
-            return warp_matrix;
-        }
-        return alignedImg;
-    } catch (...) {
-        LOGE(LOG_TAG, "========》 异常4");
-        return alignedImg;
-    }
-}
 
 /**
  * 从小到大排序
@@ -1244,7 +1176,7 @@ findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &
         LightPoint lightPoint = meanColor(image, stepFrame, lPoint, meanColorMat);
         result.push_back(lightPoint);
     }
-//    outMats.push_back(meanColorMat);
+    outMats.push_back(meanColorMat);
     return result;
 }
 
