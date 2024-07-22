@@ -123,7 +123,7 @@ decisionCenterPoints(vector<LightPoint> &input, double averageDistance);
 /**
  * 从红绿固定点和错点中推测点位
  */
-void decisionRightLeftPoints(vector<LightPoint> &totalPoints);
+void decisionRightLeftPoints(vector<LightPoint> &totalPoints,bool findFromError);
 
 /**处理剩余无序点位*/
 void decisionRemainingPoints(LampBeadsProcessor &processor);

@@ -11,7 +11,7 @@ float distance2(const Point2f &p1, const Point2f &p2) {
 
 // 辅助函数：判断点是否合理（基于预期距离）
 bool isReasonablePoint(const LightPoint &p1, const LightPoint &p2, float avgDistance,
-                       float tolerance = 0.5) {
+                       float tolerance = 0.6) {
     float expectedDist = abs(p1.label - p2.label) * avgDistance;
     float actualDist = distance2(p1.position, p2.position);
     return abs(actualDist - expectedDist) <= tolerance * expectedDist;
@@ -24,7 +24,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
                            const vector<LightPoint> &samePoints,
                            vector<LightPoint> &errorPoints,
                            float avgDistance,
-                           int neighborCount = 4) {
+                           int neighborCount = 2) {
     if (samePoints.empty()) {
         throw runtime_error("samePoints is empty");
     }
@@ -111,14 +111,15 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
 void
 processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoints,
                   vector<LightPoint> &errorPoints,
-                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap,int lightType) {
-    sort(totalPoints.begin(), totalPoints.end(),
-         [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
-
+                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap,
+                  int lightType) {
     Mat outMat = src.clone();
     for (const auto &entry: sameSerialNumMap) {
         vector<LightPoint> indices = entry.second;
         if (indices.size() > 1) {
+            sort(totalPoints.begin(), totalPoints.end(),
+                 [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
+
             LightPoint bestPoint = selectBestPoint(outMat, totalPoints, indices, errorPoints,
                                                    avgDistance);
             LOGW(LOG_TAG, "---塞入正常点位 label =%d position = %f - %f", bestPoint.label,

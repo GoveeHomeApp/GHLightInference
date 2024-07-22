@@ -369,6 +369,7 @@ extension GHDetectionTool {
     func alignmentAll(finishHandler: () -> Void) {
         do  {
             for (index, image) in self.preImageArray.enumerated() {
+                // 对齐添加多线程
                 let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
                 #if DEBUG
                 self.imageView.image = resImage

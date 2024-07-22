@@ -271,7 +271,7 @@ int getNonSequenceType(int inferredLightIndex, int lightType) {
             return greenRet;
         } else {
             if (inferredLightIndex % 2 == 0 || inferredLightIndex < 1) {
-                LOGE(LOG_TAG, "getNonSequenceType 无效输入");
+//                LOGE(LOG_TAG, "getNonSequenceType 无效输入=%d", inferredLightIndex);
                 return -1; // 无效输入
             }
             //labels[]

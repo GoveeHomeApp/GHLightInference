@@ -119,14 +119,6 @@ private:
     // 判断一个点是否为异常点
     bool isAnomaly(int index) {
         const auto &point = points[index];
-//        if (point.label == 236 || point.label == 350) {
-//            LOGD(TAG_DELETE, "--isAnomaly----- -neighbors = %d ", point.neighbors.size());
-//            if (point.neighbors.size() > 0) {
-//                LOGD(TAG_DELETE, "--isAnomaly----- -neighbors label= %d   localDensity = %d",
-//                     points[point.neighbors[0]].label,
-//                     point.localDensity);
-//            }
-//        }
         if (point.neighbors.empty()) return true;  // 没有邻近点，视为异常
 
         // 检查邻近点数量是否符合预期
@@ -145,11 +137,6 @@ private:
                 continue;
             }
             int neighborOffset = abs(points[neighborIdx].label - point.label);
-//            if (point.label == 236 || point.label == 350) {
-//                LOGD(TAG_DELETE,
-//                     "--------label = %d -neighborOffset = %d  baseLabelDiffThreshold = %d",
-//                     point.label, neighborOffset, baseLabelDiffThreshold);
-//            }
             if (neighborOffset < baseLabelDiffThreshold * 2) {
                 consistentNeighbors++;
             }

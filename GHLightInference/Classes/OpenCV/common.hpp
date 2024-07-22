@@ -45,8 +45,8 @@ enum FIND_TYPE {
 class LightPoint {
 public:
     cv::Point2f position;
-    double with = 8.0;
-    double height = 8.0;
+    double with = 9.0;
+    double height = 9.0;
     int score = -1;
     double brightness = -1;
     int label = -1;
@@ -92,6 +92,19 @@ public:
         return point;
     }
 
+    cv::Rect2i safeRect(const cv::Rect2i &region, const cv::Size &imageSize) {
+        cv::Rect2i safe = region;
+        safe.x = safe.x;
+        safe.y = safe.y;
+        safe.width = safe.width;
+        safe.height = safe.height;
+        safe.x = std::max(0, std::min(safe.x, imageSize.width - 1));
+        safe.y = std::max(0, std::min(safe.y, imageSize.height - 1));
+        safe.width = std::min(safe.width, imageSize.width - safe.x);
+        safe.height = std::min(safe.height, imageSize.height - safe.y);
+        return safe;
+    }
+
     cv::Mat buildRect(cv::Mat &src, cv::Rect &roi) {
         cv::Mat region;
         try {
@@ -100,35 +113,11 @@ public:
             }
             float x = position.x; // 指定坐标x
             float y = position.y; // 指定坐标y
-            roi = cv::Rect();
-            if (x - with / 2 < 0) {
-                roi.x = 1;
-            } else {
-                roi.x = x - with / 2 + 1;
-            }
-            if (y - height / 2 < 0) {
-                roi.y = 1;
-            } else {
-                roi.y = y - height / 2 + 1;
-            }
-            if (roi.x + roi.width > src.cols) {
-                LOGE(LOG_TAG, "x>cols with:%f  src-cols: %d   x: %f ", (roi.x + roi.width),
-                     src.cols,
-                     roi.x);
-                roi.width = src.cols - roi.x - 1;
-            }
-
-            if (roi.y + roi.height > src.rows) {
-                LOGE(LOG_TAG, "y>rows height:%f  src-rows: %d", (roi.y + roi.height), src.rows);
-                roi.height = src.rows - roi.y - 1;
-            }
-            roi.width = this->with;
-            roi.height = this->height;
-            if (roi.width < 8.0) roi.width = 8.0;
-            if (roi.height < 8.0) roi.height = 8.0;
-//        LOGD(LOG_TAG, "roi = %d x %d, w = %d, h = %d, src = %d x %d", roi.x, roi.y, roi.width,
-//             roi.height, src.cols, src.rows);
-            region = src(roi);
+            roi = cv::Rect(x, y, with, height);
+            if (roi.width < 9.0) roi.width = 9.0;
+            if (roi.height < 9.0) roi.height = 9.0;
+            cv::Rect2i safeR = safeRect(roi, src.size());
+            region = src(safeR);
         } catch (...) {
             roi = cv::Rect();
             LOGE(LOG_TAG, "构建点的矩形失败");

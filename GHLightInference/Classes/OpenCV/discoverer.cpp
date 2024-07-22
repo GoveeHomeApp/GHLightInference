@@ -96,10 +96,7 @@ findByContours(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lig
     mergePoints(pointVector, 3);
 
     LOGD(LOG_TAG, "合并点位后 pointVector =%d ", pointVector.size());
-
-    Mat outMat2 = image.clone();
-    polyPoints(pointVector, 3, 2.3, outMat2);
-    outMats.push_back(outMat2);
+    polyPoints(pointVector, 3, 2.3);
 }
 
 void findNoodleLamp(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lightPoints,
@@ -131,7 +128,7 @@ void findNoodleLamp(Mat &image, vector<Point2f> &pointVector, vector<LightPoint>
 }
 
 vector<int>
-polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold, Mat &outMat) {
+polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold) {
     vector<int> eraseVector;
     if (pointVector.empty()) {
         LOGE(LOG_TAG, "polyPoints null");
@@ -168,7 +165,7 @@ polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold, Mat &out
         // 输出离群点
         for (int i = pointsMat.rows - 1; i >= 0; i--) {
             if (distances[i] > threshold) {
-                circle(outMat, pointVector[i], 10, Scalar(0, 0, 0), 2);
+//                circle(outMat, pointVector[i], 10, Scalar(0, 0, 0), 2);
                 if (pointVector.begin() + i < pointVector.end()) {
                     pointVector.erase(pointVector.begin() + i);
                     eraseVector.push_back(i);
@@ -179,13 +176,13 @@ polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold, Mat &out
         LOGD(LOG_TAG, "pointVector擦除离群点 = %d", size - pointVector.size());
         vector<vec4f> data;
         for (int i = 0; i < pointVector.size(); i++) {
-            if (i < labels.rows && labels.at<int>(i) == 0) {
-                circle(outMat, pointVector[i], 7, Scalar(0, 0, 255, 160), 2);
-            } else if (i < labels.rows && labels.at<int>(i) == 1) {
-                circle(outMat, pointVector[i], 7, Scalar(0, 255, 0, 160), 2);
-            } else {
-                circle(outMat, pointVector[i], 7, Scalar(255, 0, 0, 160), 2);
-            }
+//            if (i < labels.rows && labels.at<int>(i) == 0) {
+//                circle(outMat, pointVector[i], 7, Scalar(0, 0, 255, 160), 2);
+//            } else if (i < labels.rows && labels.at<int>(i) == 1) {
+//                circle(outMat, pointVector[i], 7, Scalar(0, 255, 0, 160), 2);
+//            } else {
+//                circle(outMat, pointVector[i], 7, Scalar(255, 0, 0, 160), 2);
+//            }
             data.push_back(vec4f{pointVector[i].x * 1.f, pointVector[i].y * 1.f});
         }
     } catch (...) {
@@ -660,8 +657,7 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
     }
     try {
         vector<Point2f> points(pointsSrc);
-        polyPoints(points,
-                   3, 1.9, image);
+        polyPoints(points,3, 1.9);
         vector<Point2f> hull;
         convexHull(points, hull);
         vector<double> angleVector;

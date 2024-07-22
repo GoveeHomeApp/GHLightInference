@@ -1,3 +1,6 @@
+//
+// Created by linpeng on 2024/7/3.
+//
 #include <opencv2/opencv.hpp>
 //#include <opencv2/core/ocl.hpp>
 #include <vector>
@@ -74,12 +77,12 @@ public:
             : maxIterations(maxIter), terminationEps(termEps) {
         scaleFactors = {0.25, 0.5, 0.75, 1.0};  // Multi-scale approach
         useOpenCL = false;
-//        if (useOpenCL) {
+        if (useOpenCL) {
 //            cv::ocl::setUseOpenCL(true);
-//            std::cout << "OpenCL is available. Using GPU acceleration." << std::endl;
-//        } else {
-//            std::cout << "OpenCL is not available. Using CPU processing." << std::endl;
-//        }
+            std::cout << "OpenCL is available. Using GPU acceleration." << std::endl;
+        } else {
+            std::cout << "OpenCL is not available. Using CPU processing." << std::endl;
+        }
     }
 
     void addImage(const cv::Mat &image) {

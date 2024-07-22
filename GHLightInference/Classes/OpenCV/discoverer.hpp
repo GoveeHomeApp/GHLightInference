@@ -270,7 +270,7 @@ void polyContours(vector<cv::Point> &pointVector, vector<ContourInfo> &groups, i
  * 离群点检测
  */
 vector<int>
-polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold, Mat &outMat);
+polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold);//, Mat &outMat
 
 /**
  * 合并同一重复点位
@@ -283,5 +283,7 @@ void mergePoints(vector<Point2f> &points, double threshold);
 int getMinTrapezoid(Mat &image,
                     const vector<Point2f> &points, vector<Point2f>
                     &trapezoid4Points);
+
+Rect2i safeRect(const cv::Rect2i &region, const cv::Size &imageSize);
 
 #endif

@@ -7,6 +7,7 @@
  */
 #include "interpolate70cx.hpp"
 #include "inferredp.hpp"
+#include "dbscan.h"
 
 
 Point2f
@@ -485,12 +486,12 @@ struct Group {
     Group(int s, int e, bool k) : start(s), end(e), count(e - s + 1), isKnown(k) {}
 };
      */
-    for (const auto &item: groups) {
-        int isKnownInt = 0;
-        if (item.isKnown)isKnownInt = 1;
-        LOGD(LOG_TAG, "Group: start=%d   end=%d   count=%d    isKnown=%d  ", item.start, item.end,
-             item.count, item.isKnown);
-    }
+//    for (const auto &item: groups) {
+//        int isKnownInt = 0;
+//        if (item.isKnown)isKnownInt = 1;
+//        LOGD(LOG_TAG, "Group: start=%d   end=%d   count=%d    isKnown=%d  ", item.start, item.end,
+//             item.count, item.isKnown);
+//    }
     return groups;
 }
 
@@ -678,12 +679,71 @@ canBelievedAB(Point2f start, Point2f end, const vector<LightPoint> &points, int 
     //i 推断点的下一个点
     float distance = norm(start - end);
     if (distance > avgDistance * 1.5) {
-        LOGW(LOG_TAG, "canBelievedAB 当前点距离过大，i-label = %d", points[i].label);
+        LOGD(LOG_TAG, "canBelievedAB 当前点距离过大，i-label = %d", points[i].label);
         return false;
     }
     bool believePrePre = canBelievePrePre(points, i, avgDistance);
     if (believePrePre) return believePrePre;
     return canBelieveNextNext(points, i, avgDistance);
+}
+
+void removeOutliersDBSCAN(std::vector<LightPoint> &points,
+                          float eps, int minPts, float labelWeight) {
+    std::vector<LightPoint> result;
+    int n = points.size();
+
+    // 将点转换为三维空间
+    std::vector<cv::Vec3f> points3d(n);
+    float maxLabel = 0, maxX = 0, maxY = 0;
+
+    // 找出最大值用于归一化
+    for (const auto &p: points) {
+        maxLabel = std::max(maxLabel, static_cast<float>(p.label));
+        maxX = std::max(maxX, p.position.x);
+        maxY = std::max(maxY, p.position.y);
+    }
+
+    // 构建三维点并归一化
+    for (int i = 0; i < n; ++i) {
+        points3d[i] = cv::Vec3f(points[i].position.x / maxX,
+                                points[i].position.y / maxY,
+                                labelWeight * points[i].label / maxLabel);
+    }
+
+    // 应用DBSCAN
+    std::vector<int> labels;
+    auto dbscan = DBSCAN<cv::Vec3f, float>();
+    /**
+   * @describe: Run DBSCAN clustering alogrithm
+   * @param: V {std::vector<T>} : data
+   * @param: dim {unsigned int} : dimension of T (a vector-like struct)
+   * @param: eps {Float} : epsilon or in other words, radian
+   * @param: min {unsigned int} : minimal number of points in epsilon radian, then the point is cluster core point
+   * @param: disfunc {DistanceFunc} :!!!! only used in bruteforce mode.  Distance function recall. Euclidian distance is recommanded, but you can replace it by any metric measurement function
+   * @usage: Object.Run() and get the cluster and noise indices from this->Clusters & this->Noise.
+   * @pitfall: If you set big eps(search range) and huge density V, then kdtree will be a bottleneck of performance
+   * @pitfall: You MUST ensure the data's identicality (TVector* V) during Run(), because DBSCAN just use the reference of data passed in.
+   * @TODO: customize kdtree algorithm or rewrite it ,stop further searching when minimal number which indicates cluster core point condition is satisfied
+   */
+    // int Run(TVector* V, const uint dim, const Float eps, const uint min, const DistanceFunc& disfunc = [](const T& t1, const T& t2)->Float { return 0; });
+    dbscan.Run(&points3d, 3, eps, minPts);
+    auto noise = dbscan.Noise;
+    auto clusters = dbscan.Clusters;
+    LOGE(LOG_TAG, "noise：%d", noise.size());
+    LOGE(LOG_TAG, "clusters：%d", clusters.size());
+//    if (!clusters.empty()) {
+//        for (const auto &item: clusters)
+//            LOGE(LOG_TAG, "child- clusters：%d", item.size());
+//    }
+    int size = points.size();
+    for (int i = noise.size() - 1; i >= 0; i--) {
+        LOGW(LOG_TAG, "points3d pid = %d label = %d position= %f-%f", noise[i],
+             points[noise[i]].label,
+             points[noise[i]].position.x, points[noise[i]].position.y);
+        points.erase(points.begin() + noise[i]);
+    }
+
+    LOGE(LOG_TAG, "removeOutliersDBSCAN %d", size - points.size());
 }
 
 /**
@@ -692,23 +752,25 @@ canBelievedAB(Point2f start, Point2f end, const vector<LightPoint> &points, int 
 void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPoints,
                          float avgDistance) {
     int n = points.size();
-
+    LOGW(LOG_TAG, "-----detectOutlierPoints");
     if (n < 5) return;  // Need at least 5 points for this algorithm
 
     sort(points.begin(), points.end(),
          [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
 
     for (int i = n - 3; i >= 2; --i) {
+        //当前点的2侧都有点
         if (abs(points[i].label - points[i - 1].label) < 4 &&
             abs(points[i].label - points[i + 1].label) < 4) {
+
             float distPrev = norm(points[i].position - points[i - 1].position);
             float distNext = norm(points[i].position - points[i + 1].position);
             float distPrevPrev = norm(points[i - 1].position - points[i - 2].position);
             float distNextNext = norm(points[i + 1].position - points[i + 2].position);
             float distSkip = norm(points[i - 1].position - points[i + 1].position);
 
-            float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 3;
-            float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 3;
+            float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 2.2;
+            float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 2.2;
             float distanceSkip = abs(points[i - 1].label - points[i + 1].label) * avgDistance * 1.5;
             float distancePrevPrev =
                     abs(points[i - 1].label - points[i - 2].label) * avgDistance * 1.5;
@@ -717,38 +779,46 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
             bool isOutlier = (distPrev > distancePrev || distNext > distanceNext) &&
                              (distSkip <= distanceSkip) &&
                              (distPrevPrev <= distancePrevPrev || distNextNext <= distanceNextNext);
-
             if (isOutlier) {
-                LOGD(LOG_TAG,
-                     "1---detectOutlierPoints label = %d  distPrev=%f  distancePrev=%f  distPrevPrev=%f  distancePrevPrev=%f ",
-                     points[i].label, distPrev, distancePrev, distPrevPrev, distancePrevPrev);
+//                LOGW(LOG_TAG,
+//                     "1---detectOutlierPoints label = %d  distPrev=%f  distancePrev=%f  distPrevPrev=%f  distancePrevPrev=%f ",
+//                     points[i].label, distPrev, distancePrev, distPrevPrev, distancePrevPrev);
                 LOGE(LOG_TAG, "1---揪出离群点：%d", points[i].label);
                 errorPoints.push_back(points[i]);
                 points.erase(points.begin() + i);
             }
         } else if (abs(points[i].label - points[i - 1].label) > 4 &&
                    abs(points[i].label - points[i + 1].label) < 4) {
-            float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 3;
+
+            //与下一个点的阀值距离
+            float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 2.2;
+            //与下一个点的距离
             float distNext = norm(points[i].position - points[i + 1].position);
+            //后续2个点的距离
             float distNextNext = norm(points[i + 1].position - points[i + 2].position);
+            //与下下一个点的阀值距离
             float distanceNextNext =
                     abs(points[i + 1].label - points[i + 2].label) * avgDistance * 1.5;
-            bool isOutlier = (distNext > distanceNext) &&
-                             (distNextNext <= distanceNextNext);
 
+            bool isOutlier = (distNext > distanceNext) && (distNextNext <= distanceNextNext);
             if (isOutlier) {
-                LOGD(LOG_TAG,
-                     "2---detectOutlierPoints label = %d  distNext=%f  distanceNext=%f  distNextNext=%f  distanceNextNext=%f ",
-                     points[i].label, distNext, distanceNext, distNextNext, distanceNextNext);
-
+//                LOGW(LOG_TAG,
+//                     "2---detectOutlierPoints label = %d  distNext=%f  distanceNext=%f  distNextNext=%f  distanceNextNext=%f 揪出离群点：%d",
+//                     points[i].label, distNext, distanceNext, distNextNext, distanceNextNext,
+//                     points[i].label);
                 LOGE(LOG_TAG, "2---揪出离群点：%d", points[i].label);
+                errorPoints.push_back(points[i]);
+                points.erase(points.begin() + i);
+            } else if (abs(points[i].label - points[i - 1].label) > 15 &&
+                       distNextNext > distanceNextNext * 2) {
+                LOGE(LOG_TAG, "2个点都是离群点 当前label = %d", points[i].label);
                 errorPoints.push_back(points[i]);
                 points.erase(points.begin() + i);
             }
         } else if (abs(points[i].label - points[i - 1].label) < 4 &&
                    abs(points[i].label - points[i + 1].label) > 4) {
             float distPrev = norm(points[i].position - points[i - 1].position);
-            float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 3;
+            float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 2.2;
 
             float distPrevPrev = norm(points[i - 1].position - points[i - 2].position);
             float distancePrevPrev =
@@ -756,13 +826,15 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
             bool isOutlier = (distPrev > distancePrev) && (distPrevPrev <= distancePrevPrev);
 
             if (isOutlier) {
-                LOGD(LOG_TAG,
-                     "3---detectOutlierPoints label = %d  distPrev=%f  distancePrev=%f  distPrevPrev=%f  distancePrevPrev=%f ",
-                     points[i].label, distPrev, distancePrev, distPrevPrev, distancePrevPrev);
+//                LOGW(LOG_TAG,
+//                     "3---detectOutlierPoints label = %d  distPrev=%f  distancePrev=%f  distPrevPrev=%f  distancePrevPrev=%f ",
+//                     points[i].label, distPrev, distancePrev, distPrevPrev, distancePrevPrev);
                 LOGE(LOG_TAG, "3---揪出离群点：%d", points[i].label);
                 errorPoints.push_back(points[i]);
                 points.erase(points.begin() + i);
             }
+        } else {
+
         }
     }
 

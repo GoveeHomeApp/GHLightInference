@@ -67,4 +67,12 @@ bool
 canBelievedAB(Point2f A, Point2f B, const vector<LightPoint> &points, int i,
               double avgDistance);
 
+std::vector<LightPoint>
+removeOutliers(const std::vector<LightPoint> &points, float labelWeight = 0.5,
+               float threshold = 2.0);
+
+void removeOutliersDBSCAN(std::vector<LightPoint> &points,
+                          float eps = 0.2f, int minPts = 3,
+                          float labelWeight = 1);
+
 #endif
