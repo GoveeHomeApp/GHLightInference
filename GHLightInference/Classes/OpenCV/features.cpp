@@ -55,20 +55,18 @@ Mat alignResize(int frameStep, Mat &originalMat,vector<Mat> &outMats) {
     // 指定缩放后的尺寸
     Size newSize(640, 640);
     if (frameStep > STEP_VALID_FRAME_START) {
-        Mat originalMatClone = originalMat.clone();
-        alignMat = aligner.alignImage(frameStepMap[STEP_VALID_FRAME_START], originalMatClone,outMats);
+        alignMat = aligner.alignImage(frameStepMap[STEP_VALID_FRAME_START], originalMat,outMats);
         if (alignMat.empty()) {
             return alignMat;
         }
         LOGD(LOG_TAG, "alignResize %d-%d", alignMat.rows, alignMat.cols);
         resize(alignMat, srcResize, newSize);
-        frameStepMap[frameStep] = alignMat.clone();
+        frameStepMap[frameStep] = alignMat;
     } else {
         release();
         aligner = EnhancedChristmasTreeAligner();
-        resize(originalMat.clone(), srcResize, newSize);
-        alignMat = originalMat.clone();
-        frameStepMap[frameStep] = alignMat.clone();
+        resize(originalMat, srcResize, newSize);
+        frameStepMap[frameStep] = originalMat;
     }
     return srcResize;
 }
@@ -82,11 +80,17 @@ void signal_handler(int signal) {
     longjmp(jump_buffer, 1);
 }
 
+void releaseFrameStepMap(unordered_map<int, cv::Mat>& map) {
+    for (auto& pair : map) {
+        pair.second.release();  // 显式释放每个 Mat 对象
+    }
+    map.clear();  // 清空 map
+}
 
 /**释放资源*/
 void release() {
     pointsStepMap.clear();
-    frameStepMap.clear();
+    releaseFrameStepMap(frameStepMap);
     pPointXys.clear();
     pPointXys.shrink_to_fit();
     pPoints.clear();
@@ -127,11 +131,6 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
         }
 
         if (frameStep == STEP_VALID_FRAME_START && !pPoints.empty()) {
-//            Mat originalFrame1C = frameStepMap[STEP_VALID_FRAME_START].clone();
-//            putText(originalFrame1C, "tensorFlow",
-//                    Point(40, 40),
-//                    FONT_HERSHEY_SIMPLEX, 0.5,
-//                    Scalar(0, 0, 0), 2);
             for (int i = 0; i < pPoints.size(); i++) {
                 LightPoint curPoint = pPoints[i];
                 if (!curPoint.rotatedRect.size.empty()) {
@@ -139,19 +138,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
                     // 获取旋转矩形的四个顶点
                     curPoint.rotatedRect.points(vertices);
                     // 绘制旋转矩形
-//                    for (int j = 0; j < 4; ++j) {
-//                        cv::line(originalFrame1C, vertices[j], vertices[(j + 1) % 4],
-//                                 cv::Scalar(0, 255, 0), 2);
-//                    }
-                } else {
-                    Rect roi;
-//                    pPoints[i].buildRect(originalFrame1C, roi);
-//                    if (!roi.empty())
-//                        rectangle(originalFrame1C, roi, Scalar(255, 0, 50), 4);
                 }
-//                if (i == pPoints.size() - 1) {
-//                    outMats.push_back(originalFrame1C);
-//                }
             }
         }
     } catch (...) {
@@ -1152,21 +1139,21 @@ findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &
     if (src.empty())return result;
     Mat meanColorMat = src.clone();
     // 转换到HSV色彩空间
-    Mat image = src.clone();
     for (int i = 0; i < points.size(); i++) {
         LightPoint lPoint = points[i];
         Scalar scalar;
-        LightPoint lightPoint = meanColor(image, stepFrame, lPoint, meanColorMat);
+        LightPoint lightPoint = meanColor(src, stepFrame, lPoint, meanColorMat);
         result.push_back(lightPoint);
     }
-    outMats.push_back(meanColorMat);
+    meanColorMat.release();
+//    outMats.push_back(meanColorMat);
     return result;
 }
 
 /**
  * 获取区域 hsv 色相
  */
-LightPoint meanColor(Mat &image, int stepFrame, LightPoint &lPoint, Mat &meanColorMat) {
+LightPoint meanColor(const Mat &image, int stepFrame, LightPoint &lPoint, Mat &meanColorMat) {
     if (image.empty()) {
         LOGE(LOG_TAG, "meanColor(stepFrame=%d): Error: Image not found!", stepFrame);
         return LightPoint();

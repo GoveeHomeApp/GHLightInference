@@ -93,10 +93,10 @@ public:
             success = alignSingleImage(firstImage, image, aligned, alignmentQuality);
             // 如果特征点对齐失败或质量不佳，尝试轮廓对齐方法
             if (!success || alignmentQuality < config.alignmentThreshold) {
-                outMats.push_back(firstImage);
-                outMats.push_back(image);
+//                outMats.push_back(firstImage);
+//                outMats.push_back(image);
                 aligned = alignImgEcc(firstImage, image);
-                outMats.push_back(aligned);
+//                outMats.push_back(aligned);
                 success = true;
             }
             auto end = std::chrono::high_resolution_clock::now();

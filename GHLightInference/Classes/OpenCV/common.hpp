@@ -108,7 +108,7 @@ public:
         return safe;
     }
 
-    cv::Mat buildRect(cv::Mat &src, cv::Rect &roi) {
+    cv::Mat buildRect(const cv::Mat &src, cv::Rect &roi) {
         cv::Mat region;
         try {
             if (src.empty()) {

@@ -75,7 +75,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightType,
 /**
  * 获取区域 hsv 色相
  */
-LightPoint meanColor(Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColorMat);
+LightPoint meanColor(const Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColorMat);
 
 /**
  * 对灯带光点排序
