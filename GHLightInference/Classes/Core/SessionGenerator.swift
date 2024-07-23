@@ -18,6 +18,8 @@ public struct DetectionResult {
     public var pixelScale: [CGFloat] = [640, 640]
     
     public var objectPoints: [LightQueueResult] = []
+    
+    public var preImageArray: [UIImage] = []
 }
 
 public struct DetectionEffectModel {
