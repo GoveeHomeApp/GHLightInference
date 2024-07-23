@@ -58,7 +58,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
  * @param originalMat 输入原图
  * @return
  */
-Mat alignResize(int frameStep, Mat &originalMat);
+Mat alignResize(int frameStep, Mat &originalMat,vector<Mat> &outMats);
 
 /**
  * 根据定义好的步骤进行灯带排序
@@ -104,7 +104,7 @@ bool compareScore(const LightPoint &p1, const LightPoint &p2);
 /**
  * LightPoint集合输出json
  */
-string lightPointsToJson(const vector<LightPoint> &points,int lightTypeSet);
+string lightPointsToJson(const vector<LightPoint> &points, int lightTypeSet);
 
 
 /**
@@ -121,7 +121,7 @@ decisionCenterPoints(vector<LightPoint> &input, double averageDistance);
 /**
  * 从红绿固定点和错点中推测点位
  */
-void decisionRightLeftPoints(vector<LightPoint> &totalPoints,bool findFromError);
+void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findFromError);
 
 /**处理剩余无序点位*/
 void decisionRemainingPoints(LampBeadsProcessor &processor);
@@ -145,13 +145,13 @@ bool compareIndex(const LightPoint &p1, const LightPoint &p2);
  * 找出最可能点位
  */
 LightPoint findLamp(Point2f &center, double minDistance, bool checkDistance, int inferredLightIndex,
-                    bool findErrorPoints);
+                    bool findErrorPoints, bool erase = true);
 
 /**
  * 从集合中查找点位
  */
 LightPoint findLampInVector(Point2f &center, double minDistance, bool checkDistance,
-                            vector<LightPoint> &points, int type);
+                            vector<LightPoint> &points, int type, bool erase = false);
 
 /**
  * 根据水平方向推断右边点
@@ -168,6 +168,8 @@ LightPoint inferredLeft(LightPoint &curLPoint,
                         LightPoint &lastLPoint,
                         LightPoint &nextLPoint, int i, vector<LightPoint> &totalPoints,
                         bool findErrorPoints);
+
+vector<LightPoint> fillMissingPoints(const vector<LightPoint> &totalPoints, double avgDistance);
 
 /**
  * 推测中间点

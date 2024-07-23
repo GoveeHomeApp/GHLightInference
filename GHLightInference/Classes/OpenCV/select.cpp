@@ -26,7 +26,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
                            float avgDistance,
                            int neighborCount = 2) {
     if (samePoints.empty()) {
-        throw runtime_error("samePoints is empty");
+        return LightPoint(EMPTY_POINT);
     }
 
     int targetSerial = samePoints[0].label;
@@ -99,7 +99,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
             }
         }
     } catch (...) {
-        LOGE(LOG_TAG, "异常状态21");
+        LOGE(LOG_TAG, "selectBestPoint error");
     }
 
     return bestPoint;
@@ -113,26 +113,32 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
                   vector<LightPoint> &errorPoints,
                   float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap,
                   int lightType) {
-    Mat outMat = src.clone();
-    for (const auto &entry: sameSerialNumMap) {
-        vector<LightPoint> indices = entry.second;
-        if (indices.size() > 1) {
-            sort(totalPoints.begin(), totalPoints.end(),
-                 [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
+    try {
+        Mat outMat = src.clone();
+        for (const auto &entry: sameSerialNumMap) {
+            vector<LightPoint> indices = entry.second;
+            if (indices.size() > 1) {
+                sort(totalPoints.begin(), totalPoints.end(),
+                     [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
 
-            LightPoint bestPoint = selectBestPoint(outMat, totalPoints, indices, errorPoints,
-                                                   avgDistance);
-            LOGW(LOG_TAG, "---塞入正常点位 label =%d position = %f - %f", bestPoint.label,
-                 bestPoint.position.x,
-                 bestPoint.position.y);
-            circle(outMat, bestPoint.position, 6, Scalar(0, 255, 0), 2);
-            putText(outMat, to_string(bestPoint.label), bestPoint.position,
-                    FONT_HERSHEY_SIMPLEX, 0.7,
-                    Scalar(0, 255, 0), 1);
-            totalPoints.push_back(bestPoint);
+                LightPoint bestPoint = selectBestPoint(outMat, totalPoints, indices, errorPoints,
+                                                       avgDistance);
+                if (bestPoint.errorStatus != EMPTY_POINT) {
+                    LOGW(LOG_TAG, "---塞入正常点位 label =%d position = %f - %f", bestPoint.label,
+                         bestPoint.position.x,
+                         bestPoint.position.y);
+                    circle(outMat, bestPoint.position, 6, Scalar(0, 255, 0), 2);
+                    putText(outMat, to_string(bestPoint.label), bestPoint.position,
+                            FONT_HERSHEY_SIMPLEX, 0.7,
+                            Scalar(0, 255, 0), 1);
+                    totalPoints.push_back(bestPoint);
+                }
+            }
         }
-    }
-    if (lightType != TYPE_H682X) {
-        outMats.push_back(outMat);
+        if (lightType != TYPE_H682X) {
+            outMats.push_back(outMat);
+        }
+    } catch (...) {
+        LOGE(LOG_TAG, "processSamePoints error");
     }
 }

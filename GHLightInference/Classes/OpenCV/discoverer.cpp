@@ -18,7 +18,7 @@ findByContours(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lig
     cv::cvtColor(image, hsv, cv::COLOR_BGR2HSV);
 //
 //    // 分离HSV通道
-    std::vector<cv::Mat> hsvChannels;
+    vector<cv::Mat> hsvChannels;
     cv::split(hsv, hsvChannels);
 //    // 定义增强系数
     double sFactor = 1.2; // 饱和度增强系数
@@ -263,7 +263,7 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
     if (safeRegion.width <= 0 || safeRegion.height <= 0) {
         return cv::RotatedRect(); // 返回一个空的RotatedRect
     }
-    cv::Mat gray,hsv,binary2;
+    cv::Mat gray, hsv, binary2;
     cv::Mat roi = input(safeRegion);
     // 转换为灰度图
     cvtColor(roi, gray, COLOR_BGR2GRAY);
@@ -657,7 +657,7 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
     }
     try {
         vector<Point2f> points(pointsSrc);
-        polyPoints(points,3, 1.9);
+        polyPoints(points, 3, 1.9);
         vector<Point2f> hull;
         convexHull(points, hull);
         vector<double> angleVector;

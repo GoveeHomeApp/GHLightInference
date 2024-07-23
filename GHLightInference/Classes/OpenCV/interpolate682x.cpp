@@ -20,7 +20,6 @@ pair<Point2f, Point2f> getEndPoints(const RotatedRect &rect) {
     Point2f vertices[4];
     rect.points(vertices);
 
-
     // Calculate edge lengths
     float edge1 = norm(vertices[1] - vertices[0]);
     float edge2 = norm(vertices[2] - vertices[1]);
@@ -54,70 +53,76 @@ Point2f
 extrapolatePoint(const vector<Point2f> &points, int labelDiff, FitType2D fitType,
                  Size sizeLimit = Size(1450, 1950)) {
     if (points.size() < 2) return Point2f(0, 0); // Not enough points to extrapolate
-    vector<double> x, y;
-    for (const auto &p: points) {
-        x.push_back(p.x);
-        y.push_back(p.y);
-    }
-
-    Mat A, coeffs;
-    int degree = static_cast<int>(fitType);
-
-    // Prepare matrices for polynomial fitting
-    A = Mat::zeros(x.size(), degree + 1, CV_64F);
-    for (int i = 0; i < A.rows; ++i) {
-        for (int j = 0; j <= degree; ++j) {
-            A.at<double>(i, j) = pow(x[i], j);
-        }
-    }
-
-    Mat y_mat(y);
-    solve(A, y_mat, coeffs, DECOMP_QR);
-
-    // Calculate the direction vector
-    double dx = x.back() - x.front();
-    double dy = y.back() - y.front();
-    double length = sqrt(dx * dx + dy * dy);
-
-    // Normalize the direction vector
-    if (length > 1e-6) {  // Avoid division by zero
-        dx /= length;
-        dy /= length;
-    } else {
-        // If points are too close, use a default direction (e.g., positive x-axis)
-        dx = 1.0;
-        dy = 0.0;
-    }
-
-    // Calculate the step size
-    double step = length / (points.size() - 1);
-
-    // Extrapolate both x and y
-    double extrapolated_x = x.back() + labelDiff * step * dx;
-    double extrapolated_y = y.back() + labelDiff * step * dy;
-
-    // If polynomial fitting is desired (degree > 0), adjust y using the fitted polynomial
-    if (degree > 0) {
-        double fitted_y = 0;
-        for (int i = 0; i <= degree; ++i) {
-            fitted_y += coeffs.at<double>(i) * pow(extrapolated_x, i);
+    try {
+        vector<double> x, y;
+        for (const auto &p: points) {
+            x.push_back(p.x);
+            y.push_back(p.y);
         }
 
-        // Blend the linear extrapolation with the polynomial fit
-        double alpha = 0.2; // Adjust this value to control the blend
-        extrapolated_y = alpha * extrapolated_y + (1 - alpha) * fitted_y;
-    }
+        Mat A, coeffs;
+        int degree = static_cast<int>(fitType);
+
+        // Prepare matrices for polynomial fitting
+        A = Mat::zeros(x.size(), degree + 1, CV_64F);
+        for (int i = 0; i < A.rows; ++i) {
+            for (int j = 0; j <= degree; ++j) {
+                A.at<double>(i, j) = pow(x[i], j);
+            }
+        }
+
+        Mat y_mat(y);
+        solve(A, y_mat, coeffs, DECOMP_QR);
+
+        // Calculate the direction vector
+        double dx = x.back() - x.front();
+        double dy = y.back() - y.front();
+        double length = sqrt(dx * dx + dy * dy);
+
+        // Normalize the direction vector
+        if (length > 1e-6) {  // Avoid division by zero
+            dx /= length;
+            dy /= length;
+        } else {
+            // If points are too close, use a default direction (e.g., positive x-axis)
+            dx = 1.0;
+            dy = 0.0;
+        }
+
+        // Calculate the step size
+        double step = length / (points.size() - 1);
+
+        // Extrapolate both x and y
+        double extrapolated_x = x.back() + labelDiff * step * dx;
+        double extrapolated_y = y.back() + labelDiff * step * dy;
+
+        // If polynomial fitting is desired (degree > 0), adjust y using the fitted polynomial
+        if (degree > 0) {
+            double fitted_y = 0;
+            for (int i = 0; i <= degree; ++i) {
+                fitted_y += coeffs.at<double>(i) * pow(extrapolated_x, i);
+            }
+
+            // Blend the linear extrapolation with the polynomial fit
+            double alpha = 0.2; // Adjust this value to control the blend
+            extrapolated_y = alpha * extrapolated_y + (1 - alpha) * fitted_y;
+        }
 
 //    LOGD(LOG_TAG, "sizeLimit  = %d, %d   xtrapolatedd %f - %f", sizeLimit.width, sizeLimit.height,
 //         extrapolated_x, extrapolated_y);
-    // Apply smooth limiting to the extrapolated point
-    extrapolated_x = smoothLimit(extrapolated_x, 50, static_cast<double>(sizeLimit.width - 1));
-    extrapolated_y = smoothLimit(extrapolated_y, 50, static_cast<double>(sizeLimit.height - 1));
+        // Apply smooth limiting to the extrapolated point
+        extrapolated_x = smoothLimit(extrapolated_x, 50, static_cast<double>(sizeLimit.width - 1));
+        extrapolated_y = smoothLimit(extrapolated_y, 50, static_cast<double>(sizeLimit.height - 1));
 
-    return Point2f(extrapolated_x, extrapolated_y);
+        return Point2f(extrapolated_x, extrapolated_y);
+    } catch (...) {
+        LOGE(LOG_TAG, "extrapolatePoint error");
+        return Point2f(0, 0);
+    }
 }
 
 vector<LightPoint> translateRotatedRects(const vector<LightPoint> &lps, float dx, float dy) {
+    if (lps.empty())return lps;
     vector<LightPoint> translatedLps;
     translatedLps.reserve(lps.size());
 
@@ -257,94 +262,101 @@ vector<LightPoint> interpolateAndExtrapolatePoints(const Mat &src,
     if (!result.empty()) {
         // 前向外推
         LOGD(LOG_TAG, "补充外推： start = %d  min = %d", result.front().label, min);
-        if (result.front().label > min) {
-            vector<Point2f> points;
-            for (int i = 0; i < cv::min(fitPoints, static_cast<int>(result.size())); ++i) {
-                points.push_back(result[i].position);
-            }
+        try {
+            if (result.front().label > min) {
+                vector<Point2f> points;
+                for (int i = 0; i < cv::min(fitPoints, static_cast<int>(result.size())); ++i) {
+                    points.push_back(result[i].position);
+                }
 
-            for (int i = result.front().label - 1; i >= min; --i) {
-                if (existingLabels.find(i) == existingLabels.end()) {
-                    //const vector<cv::Point2f>& points, int labelDiff, FitType2D fitType, cv::Size sizeLimit
-                    Point2f extrapolatedPoint = extrapolatePoint(points,
-                                                                 result.front().label - i,
-                                                                 fitType);
-                    LightPoint lp = LightPoint();
-                    lp.label = i;
-                    lp.position = extrapolatedPoint;
-                    LightPoint reference = result.front();
-                    RotatedRect rotatedRect = RotatedRect(extrapolatedPoint,
-                                                          Size2f(reference.rotatedRect.size.width,
-                                                                 reference.rotatedRect.size.height),
-                                                          reference.rotatedRect.angle);
+                for (int i = result.front().label - 1; i >= min; --i) {
+                    if (existingLabels.find(i) == existingLabels.end()) {
+                        //const vector<cv::Point2f>& points, int labelDiff, FitType2D fitType, cv::Size sizeLimit
+                        Point2f extrapolatedPoint = extrapolatePoint(points,
+                                                                     result.front().label - i,
+                                                                     fitType);
+                        LightPoint lp = LightPoint();
+                        lp.label = i;
+                        lp.position = extrapolatedPoint;
+                        LightPoint reference = result.front();
+                        RotatedRect rotatedRect = RotatedRect(extrapolatedPoint,
+                                                              Size2f(reference.rotatedRect.size.width,
+                                                                     reference.rotatedRect.size.height),
+                                                              reference.rotatedRect.angle);
 
-                    lp.rotatedRect = rotatedRect;
-                    lp.tfRect = lp.rotatedRect.boundingRect();
-                    lp.with = targetWidth;
-                    lp.height = targetHeight;
-                    auto pair = getEndPoints(lp.rotatedRect);
-                    lp.startPoint = pair.first;
-                    lp.endPoint = pair.second;
-                    LOGD(LOG_TAG, "前向外推： label = %d  position= %f - %f", lp.label,
-                         lp.position.x,
-                         lp.position.y);
-                    result.emplace_back(lp);
-                    existingLabels.insert(i);
-                    // 更新拟合点集
-                    points.insert(points.begin(), extrapolatedPoint);
-                    if (points.size() > fitPoints) {
-                        points.pop_back();
+                        lp.rotatedRect = rotatedRect;
+                        lp.tfRect = lp.rotatedRect.boundingRect();
+                        lp.with = targetWidth;
+                        lp.height = targetHeight;
+                        auto pair = getEndPoints(lp.rotatedRect);
+                        lp.startPoint = pair.first;
+                        lp.endPoint = pair.second;
+                        LOGD(LOG_TAG, "前向外推： label = %d  position= %f - %f", lp.label,
+                             lp.position.x,
+                             lp.position.y);
+                        result.emplace_back(lp);
+                        existingLabels.insert(i);
+                        // 更新拟合点集
+                        points.insert(points.begin(), extrapolatedPoint);
+                        if (points.size() > fitPoints) {
+                            points.pop_back();
+                        }
                     }
                 }
             }
+        } catch (...) {
+            LOGE(LOG_TAG, "前向外推");
         }
+        try {
+            LOGD(LOG_TAG, "2 补充外推： end = %d  maxLabel= %d", result.back().label, maxLabel);
+            // 后向外推
+            if (result.back().label < maxLabel) {
+                vector<Point2f> points;
+                for (int i = 0; i < result.size(); ++i) {
+                    LOGD(LOG_TAG, "points push %d", result[i].label);
+                    points.push_back(result[i].position);
+                }
 
-        LOGD(LOG_TAG, "2 补充外推： end = %d  maxLabel= %d", result.back().label, maxLabel);
-        // 后向外推
-        if (result.back().label < maxLabel) {
-            vector<Point2f> points;
-            for (int i = 0; i < result.size(); ++i) {
-                LOGD(LOG_TAG, "points push %d", result[i].label);
-                points.push_back(result[i].position);
-            }
+                for (int i = result.back().label + 1; i <= maxLabel; ++i) {
+                    if (existingLabels.find(i) == existingLabels.end()) {
+                        Point2f extrapolatedPoint = extrapolatePoint(points,
+                                                                     i - result.back().label,
+                                                                     fitType);
+                        LightPoint lp = LightPoint();
+                        lp.label = i;
+                        lp.position = extrapolatedPoint;
+                        RotatedRect rotatedRect;
 
-            for (int i = result.back().label + 1; i <= maxLabel; ++i) {
-                if (existingLabels.find(i) == existingLabels.end()) {
-                    Point2f extrapolatedPoint = extrapolatePoint(points,
-                                                                 i - result.back().label,
-                                                                 fitType);
-                    LightPoint lp = LightPoint();
-                    lp.label = i;
-                    lp.position = extrapolatedPoint;
-                    RotatedRect rotatedRect;
+                        LightPoint reference = result.back();
 
-                    LightPoint reference = result.back();
-
-                    rotatedRect = RotatedRect(extrapolatedPoint,
-                                              Size2f(reference.rotatedRect.size.width,
-                                                     reference.rotatedRect.size.height),
-                                              reference.rotatedRect.angle);
+                        rotatedRect = RotatedRect(extrapolatedPoint,
+                                                  Size2f(reference.rotatedRect.size.width,
+                                                         reference.rotatedRect.size.height),
+                                                  reference.rotatedRect.angle);
 
 
-                    lp.rotatedRect = rotatedRect;
-                    lp.tfRect = lp.rotatedRect.boundingRect();
-                    lp.with = targetWidth;
-                    lp.height = targetHeight;
-                    auto pair = getEndPoints(lp.rotatedRect);
-                    lp.startPoint = pair.first;
-                    lp.endPoint = pair.second;
-                    LOGD(LOG_TAG, "后向外推： label = %d  position= %f - %f", lp.label,
-                         lp.position.x,
-                         lp.position.y);
-                    result.emplace_back(lp);
-                    existingLabels.insert(i);
-                    // 更新拟合点集
-                    points.push_back(extrapolatedPoint);
-                    if (points.size() > fitPoints) {
-                        points.erase(points.begin());
+                        lp.rotatedRect = rotatedRect;
+                        lp.tfRect = lp.rotatedRect.boundingRect();
+                        lp.with = targetWidth;
+                        lp.height = targetHeight;
+                        auto pair = getEndPoints(lp.rotatedRect);
+                        lp.startPoint = pair.first;
+                        lp.endPoint = pair.second;
+                        LOGD(LOG_TAG, "后向外推： label = %d  position= %f - %f", lp.label,
+                             lp.position.x,
+                             lp.position.y);
+                        result.emplace_back(lp);
+                        existingLabels.insert(i);
+                        // 更新拟合点集
+                        points.push_back(extrapolatedPoint);
+                        if (points.size() > fitPoints) {
+                            points.erase(points.begin());
+                        }
                     }
                 }
             }
+        } catch (...) {
+            LOGE(LOG_TAG, "后向外推");
         }
     }
 

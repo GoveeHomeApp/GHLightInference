@@ -97,7 +97,7 @@ vector<LightPoint> resLp;
     Mat aliMat = [self cvMatFromUIImage:image];
     cv::Mat imageBGR;
     cv::cvtColor(aliMat, imageBGR, cv::COLOR_RGBA2BGR);
-    Mat resMat = alignResize(ste, imageBGR);
+    Mat resMat = alignResize(ste, imageBGR, outMats);
     cv::Mat resRGBA;
     cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
     return [self UIImageFromCVMat:resRGBA];
@@ -113,14 +113,14 @@ vector<LightPoint> resLp;
         if (isRotate) {
             cv::Mat imageBGR;
             cv::cvtColor(rotate, imageBGR, cv::COLOR_RGBA2BGR);
-            Mat resMat = alignResize(ste, imageBGR);
+            Mat resMat = alignResize(ste, imageBGR, outMats);
             cv::Mat resRGBA;
             cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
             return [self UIImageFromCVMat:resRGBA];
         } else {
             cv::Mat imageBGR;
             cv::cvtColor(aliMat, imageBGR, cv::COLOR_RGBA2BGR);
-            Mat resMat = alignResize(ste, imageBGR);
+            Mat resMat = alignResize(ste, imageBGR, outMats);
             cv::Mat resRGBA;
             cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
             return [self UIImageFromCVMat:resRGBA];

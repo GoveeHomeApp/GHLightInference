@@ -68,23 +68,23 @@ public:
                   eccEpsilon(0.001),
                   useOpenCL(false),
                   alignmentThreshold(0.98),
-                  contourMethod(cv::RETR_EXTERNAL),
-                  contourApproximation(cv::CHAIN_APPROX_SIMPLE) {}
+                  contourMethod(RETR_EXTERNAL),
+                  contourApproximation(CHAIN_APPROX_SIMPLE) {}
     };
 
     EnhancedChristmasTreeAligner(const AlignmentConfig &cfg = AlignmentConfig()) : config(cfg) {
 #if USE_OPENCL
-        if (config.useOpenCL && cv::ocl::haveOpenCL()) {
-            cv::ocl::setUseOpenCL(true);
+        if (config.useOpenCL && ocl::haveOpenCL()) {
+            ocl::setUseOpenCL(true);
         }
 #endif
     }
 
-    cv::Mat alignImage(const cv::Mat &firstImage, const cv::Mat &image) {
+    Mat alignImage(const Mat &firstImage, const Mat &image, vector<Mat> &outMats) {
         if (image.empty()) return image;
         auto start = std::chrono::high_resolution_clock::now();
 
-        cv::Mat aligned = image.clone();
+        Mat aligned;
         double alignmentQuality;
         bool success = false;
 
@@ -93,7 +93,10 @@ public:
             success = alignSingleImage(firstImage, image, aligned, alignmentQuality);
             // 如果特征点对齐失败或质量不佳，尝试轮廓对齐方法
             if (!success || alignmentQuality < config.alignmentThreshold) {
+                outMats.push_back(firstImage);
+                outMats.push_back(image);
                 aligned = alignImgEcc(firstImage, image);
+                outMats.push_back(aligned);
                 success = true;
             }
             auto end = std::chrono::high_resolution_clock::now();
@@ -109,67 +112,67 @@ public:
 private:
     AlignmentConfig config;
 
-    cv::Mat preprocess(const cv::Mat &input) {
-        cv::Mat processed;
+    Mat preprocess(const Mat &input) {
+        Mat processed;
 
         if (config.useScaling) {
-            cv::resize(input, processed, cv::Size(), config.scale, config.scale);
+            resize(input, processed, Size(), config.scale, config.scale);
         } else {
             processed = input.clone();
         }
 
-        cv::cvtColor(processed, processed, cv::COLOR_BGR2GRAY);
+        cvtColor(processed, processed, COLOR_BGR2GRAY);
         if (config.blurSize > 1) {
-            cv::GaussianBlur(processed, processed, cv::Size(config.blurSize, config.blurSize), 0);
+            GaussianBlur(processed, processed, Size(config.blurSize, config.blurSize), 0);
         }
         if (config.thresholdValue > 0) {
-            cv::threshold(processed, processed, config.thresholdValue, 255, cv::THRESH_BINARY);
+            threshold(processed, processed, config.thresholdValue, 255, THRESH_BINARY);
         }
         return processed;
     }
 
-    bool alignSingleImage(const cv::Mat &reference, const cv::Mat &target, cv::Mat &result,
+    bool alignSingleImage(const Mat &reference, const Mat &target, Mat &result,
                           double &alignmentQuality) {
-        cv::Mat refProcessed = preprocess(reference);
-        cv::Mat targetProcessed = preprocess(target);
+        Mat refProcessed = preprocess(reference);
+        Mat targetProcessed = preprocess(target);
 
         // 特征点检测和匹配
-        cv::Ptr<cv::Feature2D> orb = cv::ORB::create(config.maxFeatures);
-        std::vector<cv::KeyPoint> keypointsRef, keypointsTarget;
-        cv::Mat descriptorsRef, descriptorsTarget;
+        Ptr<Feature2D> orb = ORB::create(config.maxFeatures);
+        std::vector<KeyPoint> keypointsRef, keypointsTarget;
+        Mat descriptorsRef, descriptorsTarget;
 
 #if USE_OPENCL
-        if (config.useOpenCL && cv::ocl::haveOpenCL()) {
+        if (config.useOpenCL && ocl::haveOpenCL()) {
             LOGE(LOG_TAG,
                  "---------------------------> 使用 OpenCL 加速特征检测和计算 <--------------------------- ");
             // 使用 OpenCL 加速特征检测和计算
-            cv::UMat uRefProcessed = refProcessed.getUMat(cv::ACCESS_READ);
-            cv::UMat uTargetProcessed = targetProcessed.getUMat(cv::ACCESS_READ);
-            cv::UMat uDescriptorsRef, uDescriptorsTarget;
+            UMat uRefProcessed = refProcessed.getUMat(ACCESS_READ);
+            UMat uTargetProcessed = targetProcessed.getUMat(ACCESS_READ);
+            UMat uDescriptorsRef, uDescriptorsTarget;
 
-            orb->detectAndCompute(uRefProcessed, cv::noArray(), keypointsRef, uDescriptorsRef);
-            orb->detectAndCompute(uTargetProcessed, cv::noArray(), keypointsTarget,
+            orb->detectAndCompute(uRefProcessed, noArray(), keypointsRef, uDescriptorsRef);
+            orb->detectAndCompute(uTargetProcessed, noArray(), keypointsTarget,
                                   uDescriptorsTarget);
 
             uDescriptorsRef.copyTo(descriptorsRef);
             uDescriptorsTarget.copyTo(descriptorsTarget);
         } else {
 #endif
-            orb->detectAndCompute(refProcessed, cv::noArray(), keypointsRef, descriptorsRef);
-            orb->detectAndCompute(targetProcessed, cv::noArray(), keypointsTarget,
+            orb->detectAndCompute(refProcessed, noArray(), keypointsRef, descriptorsRef);
+            orb->detectAndCompute(targetProcessed, noArray(), keypointsTarget,
                                   descriptorsTarget);
 #if USE_OPENCL
         }
 #endif
 
         // 使用 Brute-Force matcher 进行特征匹配
-        cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(
+        Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(
                 "BruteForce-Hamming");
-        std::vector<std::vector<cv::DMatch>> knnMatches;
+        std::vector<std::vector<DMatch>> knnMatches;
         matcher->knnMatch(descriptorsRef, descriptorsTarget, knnMatches, 2);
 
         // 应用比率测试来筛选好的匹配点
-        std::vector<cv::DMatch> goodMatches;
+        std::vector<DMatch> goodMatches;
         const float ratioThresh = 0.75f;
         for (size_t i = 0; i < knnMatches.size(); i++) {
             if (knnMatches[i][0].distance < ratioThresh * knnMatches[i][1].distance) {
@@ -182,7 +185,7 @@ private:
             return false;
         }
 
-        std::vector<cv::Point2f> pointsRef, pointsTarget;
+        std::vector<Point2f> pointsRef, pointsTarget;
         for (const auto &match: goodMatches) {
             pointsRef.push_back(keypointsRef[match.queryIdx].pt);
             pointsTarget.push_back(keypointsTarget[match.trainIdx].pt);
@@ -190,11 +193,11 @@ private:
 
         // 使用RANSAC估计变换矩阵
         std::vector<uchar> inliersMask;
-        cv::Mat H = cv::findHomography(pointsTarget, pointsRef, cv::RANSAC,
-                                       config.ransacReprojThreshold, inliersMask);
+        Mat H = findHomography(pointsTarget, pointsRef, RANSAC,
+                               config.ransacReprojThreshold, inliersMask);
 
         // 计算内点比例
-        float inlierRatio = static_cast<float>(cv::sum(inliersMask)[0]) / inliersMask.size();
+        float inlierRatio = static_cast<float>(sum(inliersMask)[0]) / inliersMask.size();
         if (inlierRatio < 0.5f) {
             LOGD(LOG_TAG, "Inlier ratio too low. Ratio: %f ", inlierRatio);
             return false;
@@ -202,17 +205,17 @@ private:
         Mat targetGray, warpedTargetGray, referenceGray, warpedTarget;
         cvtColor(target, targetGray, CV_BGR2GRAY);
         cvtColor(reference, referenceGray, CV_BGR2GRAY);
-        cv::warpPerspective(target, warpedTarget, H, target.size());
-        cv::Mat warpMatrix = cv::Mat::eye(3, 3, CV_32F);
+        warpPerspective(target, warpedTarget, H, target.size());
+        Mat warpMatrix = Mat::eye(3, 3, CV_32F);
 
         // 使用ECC细化对齐
         try {
             cvtColor(warpedTarget, warpedTargetGray, CV_BGR2GRAY);
             // 确保图像类型一致
-            double ecc = cv::findTransformECC(
-                    referenceGray, warpedTargetGray, warpMatrix, cv::MOTION_HOMOGRAPHY,
-                    cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS,
-                                     config.eccIterations, config.eccEpsilon)
+            double ecc = findTransformECC(
+                    referenceGray, warpedTargetGray, warpMatrix, MOTION_HOMOGRAPHY,
+                    TermCriteria(TermCriteria::COUNT + TermCriteria::EPS,
+                                 config.eccIterations, config.eccEpsilon)
             );
             LOGW(LOG_TAG, "使用ECC细化对齐 ecc = %f ", ecc);
             alignmentQuality = ecc;
@@ -222,7 +225,7 @@ private:
             }
             warpPerspective(warpedTarget, result, warpMatrix, warpedTarget.size(),
                             INTER_LINEAR + WARP_INVERSE_MAP);
-        } catch (cv::Exception &e) {
+        } catch (Exception &e) {
             LOGE(LOG_TAG, "使用ECC细化对齐  e =  %s", e.what());
             warpMatrix = H;
             alignmentQuality = 0.5;
@@ -233,7 +236,7 @@ private:
     /**
      * 对齐图片
      */
-    cv::Mat alignImgEcc(const Mat &src, const Mat &trans) {
+    cv::Mat alignImgEcc(const Mat &src, const Mat &trans, int motionTypeSet = MOTION_AFFINE) {
         if (src.empty()) {
             return trans;
         }
@@ -243,8 +246,14 @@ private:
         LOGD(LOG_TAG, "===========alignImgEcc===========");
         Mat alignedImg;
         try {
-            Mat warp_matrix = Mat::eye(3, 3, CV_32F);
-
+            Mat warp_matrix;
+            if (motionTypeSet == MOTION_AFFINE) {
+                warp_matrix = Mat::eye(2, 3, CV_32F);
+            } else if (motionTypeSet == MOTION_HOMOGRAPHY) {//MOTION_HOMOGRAPHY 耗时更久
+                warp_matrix = Mat::eye(3, 3, CV_32F);
+            } else {
+                //MOTION_EUCLIDEAN
+            }
             // 降低图像分辨率
             // 创建掩膜，指定搜索区域
             Mat mask = Mat::zeros(trans.size(), CV_8UC1);
@@ -263,28 +272,36 @@ private:
 
             TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS, number_of_iterations2,
                                   termination_eps2);
-            double ecc = findTransformECC(im1Src, im2Trans, warp_matrix, MOTION_HOMOGRAPHY,
-                                          criteria, mask);//, mask
+            double ecc = findTransformECC(im1Src, im2Trans, warp_matrix, motionTypeSet,
+                                          criteria, mask);
             LOGW(LOG_TAG, "alignImgEcc ecc = %f ", ecc);
-            warpPerspective(trans, alignedImg, warp_matrix, trans.size(),
-                            INTER_LINEAR + WARP_INVERSE_MAP);
+            if (motionTypeSet == MOTION_HOMOGRAPHY) {
+                warpPerspective(trans, alignedImg, warp_matrix, trans.size(),
+                                INTER_LINEAR + WARP_INVERSE_MAP);
+            } else {
+                warpAffine(trans, alignedImg, warp_matrix, trans
+                        .size(), INTER_LINEAR + WARP_INVERSE_MAP);
+            }
             return alignedImg;
         } catch (cv::Exception &e) {
             LOGE(LOG_TAG, "alignImgEcc , e = %s", e.what());
-            return trans;
+            return alignedImg;
+        } catch (...) {
+            LOGE(LOG_TAG, "alignImgEcc error");
+            return alignedImg;
         }
     }
 
-    bool alignSingleImageContour(const cv::Mat &reference, const cv::Mat &target, cv::Mat &result,
+    bool alignSingleImageContour(const Mat &reference, const Mat &target, Mat &result,
                                  double &alignmentQuality) {
-        cv::Mat refProcessed = preprocess(reference);
-        cv::Mat targetProcessed = preprocess(target);
+        Mat refProcessed = preprocess(reference);
+        Mat targetProcessed = preprocess(target);
 
-        std::vector<std::vector<cv::Point>> contoursRef, contoursTarget;
-        cv::findContours(refProcessed, contoursRef, config.contourMethod,
-                         config.contourApproximation);
-        cv::findContours(targetProcessed, contoursTarget, config.contourMethod,
-                         config.contourApproximation);
+        std::vector<std::vector<Point>> contoursRef, contoursTarget;
+        findContours(refProcessed, contoursRef, config.contourMethod,
+                     config.contourApproximation);
+        findContours(targetProcessed, contoursTarget, config.contourMethod,
+                     config.contourApproximation);
 
         if (contoursRef.empty() || contoursTarget.empty()) {
             std::cerr << "No contours found in one of the images" << std::endl;
@@ -293,38 +310,38 @@ private:
 
         // 找到最大的轮廓（假设是圣诞树）
         auto maxContourRef = *std::max_element(contoursRef.begin(), contoursRef.end(),
-                                               [](const std::vector<cv::Point> &c1,
-                                                  const std::vector<cv::Point> &c2) {
-                                                   return cv::contourArea(c1) < cv::contourArea(c2);
+                                               [](const std::vector<Point> &c1,
+                                                  const std::vector<Point> &c2) {
+                                                   return contourArea(c1) < contourArea(c2);
                                                });
         auto maxContourTarget = *std::max_element(contoursTarget.begin(), contoursTarget.end(),
-                                                  [](const std::vector<cv::Point> &c1,
-                                                     const std::vector<cv::Point> &c2) {
-                                                      return cv::contourArea(c1) <
-                                                             cv::contourArea(c2);
+                                                  [](const std::vector<Point> &c1,
+                                                     const std::vector<Point> &c2) {
+                                                      return contourArea(c1) <
+                                                             contourArea(c2);
                                                   });
 
         // 计算轮廓的矩
-        cv::Moments momentsRef = cv::moments(maxContourRef);
-        cv::Moments momentsTarget = cv::moments(maxContourTarget);
+        Moments momentsRef = moments(maxContourRef);
+        Moments momentsTarget = moments(maxContourTarget);
 
         // 计算质心
-        cv::Point2f centerRef(momentsRef.m10 / momentsRef.m00, momentsRef.m01 / momentsRef.m00);
-        cv::Point2f centerTarget(momentsTarget.m10 / momentsTarget.m00,
-                                 momentsTarget.m01 / momentsTarget.m00);
+        Point2f centerRef(momentsRef.m10 / momentsRef.m00, momentsRef.m01 / momentsRef.m00);
+        Point2f centerTarget(momentsTarget.m10 / momentsTarget.m00,
+                             momentsTarget.m01 / momentsTarget.m00);
 
         // 计算平移
-        cv::Point2f translation = centerRef - centerTarget;
+        Point2f translation = centerRef - centerTarget;
 
         // 创建变换矩阵
-        cv::Mat transMatrix = (cv::Mat_<float>(2, 3) << 1, 0, translation.x, 0, 1, translation.y);
+        Mat transMatrix = (Mat_<float>(2, 3) << 1, 0, translation.x, 0, 1, translation.y);
 
         // 应用变换
-        cv::warpAffine(target, result, transMatrix, reference.size());
+        warpAffine(target, result, transMatrix, reference.size());
 
         // 计算对齐质量（这里使用轮廓面积的比率作为简单的度量）
-        double areaRef = cv::contourArea(maxContourRef);
-        double areaTarget = cv::contourArea(maxContourTarget);
+        double areaRef = contourArea(maxContourRef);
+        double areaTarget = contourArea(maxContourTarget);
         alignmentQuality = std::min(areaRef, areaTarget) / std::max(areaRef, areaTarget);
 
         return true;
@@ -334,10 +351,10 @@ private:
 //// 使用示例
 ////int main() {
 ////    try {
-////        std::vector<cv::Mat> images;
+////        std::vector<Mat> images;
 ////        for (int i = 0; i < 5; ++i) {
 ////            std::string filename = "tree_" + std::to_string(i) + ".jpg";
-////            cv::Mat img = cv::imread(filename);
+////            Mat img = imread(filename);
 ////            if (img.empty()) {
 ////                throw std::runtime_error("Failed to load image: " + filename);
 ////            }
@@ -351,12 +368,12 @@ private:
 ////        config.alignmentThreshold = 0.7;
 ////
 ////        EnhancedChristmasTreeAligner aligner(config);
-////        std::vector<cv::Mat> alignedImages = aligner.alignImages(images);
+////        std::vector<Mat> alignedImages = aligner.alignImages(images);
 ////
 ////        for (size_t i = 0; i < alignedImages.size(); ++i) {
-////            cv::imshow("Aligned Image " + std::to_string(i), alignedImages[i]);
+////            imshow("Aligned Image " + std::to_string(i), alignedImages[i]);
 ////        }
-////        cv::waitKey(0);
+////        waitKey(0);
 ////    } catch (const std::exception &e) {
 ////        std::cerr << "An error occurred: " << e.what() << std::endl;
 ////        return -1;

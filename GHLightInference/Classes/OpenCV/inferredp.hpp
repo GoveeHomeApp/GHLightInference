@@ -30,4 +30,5 @@ findExtensionPointAB2C(const LightPoint &lA, const LightPoint &lB, int inferredL
 double sigmoid(double x, double scale = 10.0);
 
 double smoothLimit(double value, double min, double max, double transitionRange = 0.1);
+
 #endif
