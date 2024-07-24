@@ -128,6 +128,7 @@ vector<LightPoint> resLp;
         NSLog(@"%s", exception.what());
         errorBlock(@"alignment error");
     }
+    return image;
 }
 
 - (void)createLightPointArray:(NSArray *)poArray withBiz:(NSInteger)bizType {
@@ -167,6 +168,7 @@ vector<LightPoint> resLp;
         NSLog(@"%s", exception.what());
         errorBlock(@"caculate error");
     }
+    return @"";
 }
 
 - (void)clearAllresLp {
