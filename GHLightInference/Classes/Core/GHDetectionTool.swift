@@ -187,9 +187,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             guard let `self` = self else { return }
             print("log.f ==== 收到第\(step)帧效果发送成功 取帧")
             if let _ = self.transaction { //正常transaction
-                var second = 0.3
+                var second = 0.2
                 if step == 0 {
-                    second = 0.8 // 第一帧延时取
+                    second = 0.5 // 第一帧延时取
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + second) {
                     self.captureOneFrame()
@@ -289,7 +289,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 self.saveImageView.image = scaleImage
                 self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                 #endif
-                DispatchQueue.main.asyncAfter(deadline: .now()+0.2) {
+                DispatchQueue.main.asyncAfter(deadline: .now()+0.15) {
                     self.capFinishHandler?()
                 }
             }
@@ -370,7 +370,10 @@ extension GHDetectionTool {
         do  {
             for (index, image) in self.preImageArray.enumerated() {
                 // 对齐添加多线程
-                let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true)
+                let resImage = GHOpenCVBridge.shareManager().alignment(with:image, step: index, rotation: true) { [weak self] err in
+                    self?.doneFailed()
+                    return
+                }
                 #if DEBUG
                 self.imageView.image = resImage
                 #endif
@@ -391,11 +394,11 @@ extension GHDetectionTool {
     // 结果组装返回
     func doneDetection(points: LightQueueBase) -> DetectionResult? {
         // H6820 不需要放缩
-        let scale = self.bizType != 2 ? Int(UIScreen.main.scale) : 1
+        let scale:CGFloat = self.bizType != 2 ? 2.5 : 1
         var pointsDict: [Int: [CGFloat]] = [:]
         var anchorPoints: [[CGFloat]] = []
         for res in points.lightPoints {
-            let ptArray = [CGFloat(res.x), CGFloat(res.y*scale)]
+            let ptArray = [CGFloat(res.x), CGFloat(res.y)*scale]
             pointsDict[res.index] = ptArray
         }
         // 直接拿四个点 变更点位置
@@ -404,7 +407,7 @@ extension GHDetectionTool {
             points.trapezoidalPoints.insert(res, at: 0)
             points.trapezoidalPoints.swapAt(2, 3) // 交换下标 1,2
             for pt in points.trapezoidalPoints{
-                anchorPoints.append([CGFloat(pt.x), CGFloat(pt.y*scale)])
+                anchorPoints.append([CGFloat(pt.x), CGFloat(pt.y)*scale])
             }
         }
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints, preImageArray: self.preImageArray)
@@ -490,7 +493,10 @@ extension GHDetectionTool {
                     var resultJsonString = ""
                     do {
                         for (idx, _) in self.afterImgArray.enumerated() {
-                            let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType)
+                            let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType) { [weak self] err in
+                                self?.doneFailed()
+                                return
+                            }
                             if idx == self.afterImgArray.count-1 {
                                 resultJsonString = jsonStr
                             }

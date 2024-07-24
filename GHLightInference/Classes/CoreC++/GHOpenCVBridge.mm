@@ -102,8 +102,7 @@ vector<LightPoint> resLp;
     cv::cvtColor(resMat, resRGBA, cv::COLOR_BGR2RGBA);
     return [self UIImageFromCVMat:resRGBA];
 }
-
-- (UIImage *)alignmentWithImage:(UIImage *)image step:(NSInteger)stepCount rotation:(BOOL)isRotate {
+- (UIImage *)alignmentWithImage:(UIImage *)image step:(NSInteger)stepCount rotation:(BOOL)isRotate error:(void (^)(NSString * _Nonnull))errorBlock {
     try {
         self.alignStep = stepCount;
         int ste = (int)stepCount;
@@ -127,7 +126,7 @@ vector<LightPoint> resLp;
         }
     } catch (const std::exception& exception) {
         NSLog(@"%s", exception.what());
-        throw exception;
+        errorBlock(@"alignment error");
     }
 }
 
@@ -158,7 +157,7 @@ vector<LightPoint> resLp;
     }
 }
 
-- (NSString *)caculateNumByStep:(NSInteger)stepCount bizType:(NSInteger)type {
+- (NSString *)caculateNumByStep:(NSInteger)stepCount bizType:(NSInteger)type error:(void (^)(NSString * _Nonnull))errorBlock {
     try {
         string jsonStr = "";
         jsonStr = sortStripByStep((int)stepCount, resLp, type, outMats);
@@ -166,7 +165,7 @@ vector<LightPoint> resLp;
         return res;
     } catch (const std::exception& exception) {
         NSLog(@"%s", exception.what());
-        throw exception;
+        errorBlock(@"caculate error");
     }
 }
 
