@@ -70,6 +70,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public var resPointView = UIView(frame: CGRect(x: 0, y: 0, width: 160, height: 160))
     public var detectionImage: UIImage?
     public var finalImage: UIImage?
+    private var sc:(Double, Double) = (0.0, 0.0)
     
     public init(sku: String, ic: Int, dimension: String, initializeFinishNotice:(() -> Void)? = nil, finishFrameNotice: ((Bool) -> Void)? = nil ,frameNotice: ((DetectionEffectModel) -> Void)? = nil, doneNotice: ((DetectionResult?) -> Void)? = nil) {
         self.sku = sku
@@ -284,6 +285,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         if self.needGetFrame {
             print("\n log.f ============= 开始取一帧")
             if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer),let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
+                print("log.f ====== width\(image.size.width) height\(image.size.height)")
+                self.sc = (image.size.width, image.size.height)
                 self.preImageArray.append(scaleImage)
                 #if DEBUG
                 self.saveImageView.image = scaleImage
@@ -394,21 +397,44 @@ extension GHDetectionTool {
     // 结果组装返回
     func doneDetection(points: LightQueueBase) -> DetectionResult? {
         // H6820 不需要放缩
-        let scale:CGFloat = self.bizType != 2 ? 4 : 1
-        let scaleY:CGFloat = self.bizType != 2 ? 1.5 : 1
+        let scaleY:CGFloat = self.bizType != 2 ? sc.0 : 1
+        let scaleX:CGFloat = self.bizType != 2 ? sc.1 : 1
+        
         var pointsDict: [Int: [CGFloat]] = [:]
         var anchorPoints: [[CGFloat]] = []
         for res in points.lightPoints {
-            let ptArray = [CGFloat(res.x)*scaleY, CGFloat(res.y)*scale]
+            let ptArray = [CGFloat(res.x)*scaleX, CGFloat(res.y)*scaleY]
             pointsDict[res.index] = ptArray
         }
         // 直接拿四个点 变更点位置
         if !points.trapezoidalPoints.isEmpty {
+            var xr = 0
+            var xl = 0
+            for p in points.trapezoidalPoints {
+                // 左上点
+                if p.pName == "lT" {
+                    xl = p.x
+                }
+                if p.pName == "rT" {
+                    xr = p.x
+                }
+            }
+            let width = (xr-xl)/2 - 50
+            print("log.f ====== real half width\(width)")
+            for p in points.trapezoidalPoints {
+                if p.pName == "lT" {
+                    p.x = Int(CGFloat(p.x)+CGFloat(width))
+                }
+                if p.pName == "rT" {
+                    p.x = Int(CGFloat(p.x)-CGFloat(width))
+                }
+            }
+            
             let res = points.trapezoidalPoints.removeLast()
             points.trapezoidalPoints.insert(res, at: 0)
             points.trapezoidalPoints.swapAt(2, 3) // 交换下标 1,2
             for pt in points.trapezoidalPoints{
-                anchorPoints.append([CGFloat(pt.x)*scaleY, CGFloat(pt.y)*scale])
+                anchorPoints.append([CGFloat(pt.x)*scaleX, CGFloat(pt.y)*scaleY])
             }
         }
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints, preImageArray: self.preImageArray)
@@ -417,7 +443,7 @@ extension GHDetectionTool {
     // 识别灯珠
     func runDetection() {
         // 只对第一张图进行识别
-        if let prepostProcessor = self.prepostProcessor {
+        if let prepostProcessor = self.prepostProcessor, !self.afterImgArray.isEmpty {
             let image = self.afterImgArray[0]
             let imageView = self.imageView
             self.imageView.image = image
@@ -492,22 +518,14 @@ extension GHDetectionTool {
                     }
                     
                     var resultJsonString = ""
-                    do {
-                        for (idx, _) in self.afterImgArray.enumerated() {
-                            let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType) { [weak self] err in
-                                self?.doneFailed()
-                                return
-                            }
-                            if idx == self.afterImgArray.count-1 {
-                                resultJsonString = jsonStr
-                            }
+                    for (idx, _) in self.afterImgArray.enumerated() {
+                        let jsonStr =  GHOpenCVBridge.shareManager().caculateNum(byStep: idx, bizType: self.bizType) { [weak self] err in
+                            self?.doneFailed()
+                            return
                         }
-                    } catch let error as NSError {
-                        print("log.f ====== RFAILED Caught an Objective-C exception: \(error.localizedDescription)")
-                        self.doneFailed()
-                    } catch {
-                        print("log.f ====== RFAILED Caught a Swift error: \(error)")
-                        self.doneFailed()
+                        if idx == self.afterImgArray.count-1 {
+                            resultJsonString = jsonStr
+                        }
                     }
                     print("log.f result json string \(resultJsonString)")
                     if let data = resultJsonString.data(using: .utf8) {
@@ -586,12 +604,13 @@ extension GHDetectionTool {
                             self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
-                            self.doneNotice?(nil)
-                            self.transaction = nil
+                            self.doneFailed()
                         }
                     }
                 }
             }
+        } else {
+            self.doneFailed()
         }
     }
 }
