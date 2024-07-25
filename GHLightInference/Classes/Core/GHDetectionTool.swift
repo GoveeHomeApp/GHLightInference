@@ -394,7 +394,7 @@ extension GHDetectionTool {
     // 结果组装返回
     func doneDetection(points: LightQueueBase) -> DetectionResult? {
         // H6820 不需要放缩
-        let scale:CGFloat = self.bizType != 2 ? 3 : 1
+        let scale:CGFloat = self.bizType != 2 ? 4 : 1
         let scaleY:CGFloat = self.bizType != 2 ? 1.5 : 1
         var pointsDict: [Int: [CGFloat]] = [:]
         var anchorPoints: [[CGFloat]] = []
