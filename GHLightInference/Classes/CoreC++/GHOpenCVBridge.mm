@@ -69,6 +69,8 @@ vector<LightPoint> resLp;
 }
 
 - (void)createAllStepByIc:(NSInteger)icCount {
+    // 每次开始释放旧资源
+    releaseAll();
     initVector((int)icCount);
 }
 
@@ -272,6 +274,21 @@ vector<LightPoint> resLp;
     CGColorSpaceRelease(colorSpace);
     return finalImage;
  }
+
+/**释放资源*/
+void releaseAll() {
+    for (auto& pair : outMats) {
+        pair.release();  // 显式释放每个 Mat 对象
+    }
+    outMats.clear();
+    
+    for (auto& pair : emptyMats) {
+        pair.release();  // 显式释放每个 Mat 对象
+    }
+    emptyMats.clear();
+    resLp.clear();
+    resLp.shrink_to_fit();
+}
 
 
 @end

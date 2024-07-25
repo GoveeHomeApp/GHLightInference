@@ -187,9 +187,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             guard let `self` = self else { return }
             print("log.f ==== 收到第\(step)帧效果发送成功 取帧")
             if let _ = self.transaction { //正常transaction
-                var second = 0.2
+                var second = 0.1
                 if step == 0 {
-                    second = 0.5 // 第一帧延时取
+                    second = 0.3 // 第一帧延时取
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + second) {
                     self.captureOneFrame()
@@ -289,7 +289,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 self.saveImageView.image = scaleImage
                 self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                 #endif
-                DispatchQueue.main.asyncAfter(deadline: .now()+0.15) {
+                DispatchQueue.main.asyncAfter(deadline: .now()+0.1) {
                     self.capFinishHandler?()
                 }
             }
