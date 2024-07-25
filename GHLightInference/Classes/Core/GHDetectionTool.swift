@@ -394,11 +394,12 @@ extension GHDetectionTool {
     // 结果组装返回
     func doneDetection(points: LightQueueBase) -> DetectionResult? {
         // H6820 不需要放缩
-        let scale:CGFloat = self.bizType != 2 ? 2.5 : 1
+        let scale:CGFloat = self.bizType != 2 ? 3 : 1
+        let scaleY:CGFloat = self.bizType != 2 ? 1.5 : 1
         var pointsDict: [Int: [CGFloat]] = [:]
         var anchorPoints: [[CGFloat]] = []
         for res in points.lightPoints {
-            let ptArray = [CGFloat(res.x), CGFloat(res.y)*scale]
+            let ptArray = [CGFloat(res.x)*scaleY, CGFloat(res.y)*scale]
             pointsDict[res.index] = ptArray
         }
         // 直接拿四个点 变更点位置
@@ -407,7 +408,7 @@ extension GHDetectionTool {
             points.trapezoidalPoints.insert(res, at: 0)
             points.trapezoidalPoints.swapAt(2, 3) // 交换下标 1,2
             for pt in points.trapezoidalPoints{
-                anchorPoints.append([CGFloat(pt.x), CGFloat(pt.y)*scale])
+                anchorPoints.append([CGFloat(pt.x)*scaleY, CGFloat(pt.y)*scale])
             }
         }
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints, preImageArray: self.preImageArray)
