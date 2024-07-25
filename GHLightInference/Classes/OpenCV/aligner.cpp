@@ -52,10 +52,14 @@ private:
 
                 cv::warpAffine(currentAligned, currentAligned, warp_matrix, currentAligned.size(),
                                cv::INTER_LINEAR + cv::WARP_INVERSE_MAP);
-            } catch (cv::Exception &e) {
-                std::cerr << "ECC alignment failed at scale " << scale << ": " << e.what()
-                          << std::endl;
-                // Continue to the next scale
+            }
+//            catch (cv::Exception &e) {
+//                std::cerr << "ECC alignment failed at scale " << scale << ": " << e.what()
+//                          << std::endl;
+//                // Continue to the next scale
+//            }
+            catch (...) {
+                std::cerr << "ECC alignment failed at scale " << scale << std::endl;
             }
         }
 

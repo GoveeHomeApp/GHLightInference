@@ -22,10 +22,10 @@ Pod::Spec.new do |s|
 
   #- 推荐这种 -#
   s.resource_bundles = { 'GHLightInference' => ['GHLightInference/Assets/**/*.{xcassets,png,torchscript.ptl,json,plist,txt}'] }
-#  s.vendored_frameworks = ['opencv2.framework']
+  s.vendored_frameworks = ['opencv2.framework']
   s.xcconfig = { 'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/LibTorch-Lite/install/include/"' }
   s.dependency 'LibTorch-Lite', '~>1.13.0.1'
   s.dependency 'HandyJSON'
-  s.dependency 'OpenCV2'
+#  s.dependency 'OpenCV2'
   
 end

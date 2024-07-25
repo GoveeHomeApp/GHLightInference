@@ -88,24 +88,24 @@ public:
         double alignmentQuality;
         bool success = false;
 
-        try {
-            // 尝试使用特征点对齐方法
-            success = alignSingleImage(firstImage, image, aligned, alignmentQuality);
-            // 如果特征点对齐失败或质量不佳，尝试轮廓对齐方法
-            if (!success || alignmentQuality < config.alignmentThreshold) {
-//                outMats.push_back(firstImage);
-//                outMats.push_back(image);
-                aligned = alignImgEcc(firstImage, image);
-//                outMats.push_back(aligned);
-                success = true;
-            }
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> diff = end - start;
-            LOGD(LOG_TAG, "Aligning image took %f seconds", diff.count());
-        } catch (const std::exception &e) {
-            LOGE(LOG_TAG, "Error aligning image  e =  %s", e.what());
+//        try {
+//            // 尝试使用特征点对齐方法
+//            success = alignSingleImage(firstImage, image, aligned, alignmentQuality);
+//            // 如果特征点对齐失败或质量不佳，尝试轮廓对齐方法
+//            if (!success || alignmentQuality < config.alignmentThreshold) {
+////                outMats.push_back(firstImage);
+////                outMats.push_back(image);
+//                aligned = alignImgEcc(firstImage, image);
+////                outMats.push_back(aligned);
+//                success = true;
+//            }
+//            auto end = std::chrono::high_resolution_clock::now();
+//            std::chrono::duration<double> diff = end - start;
+//            LOGD(LOG_TAG, "Aligning image took %f seconds", diff.count());
+//        } catch (const std::exception &e) {
+//            LOGE(LOG_TAG, "Error aligning image  e =  %s", e.what());
             aligned = alignImgEcc(firstImage, image);
-        }
+//        }
         return aligned;
     }
 
@@ -131,107 +131,107 @@ private:
         return processed;
     }
 
-    bool alignSingleImage(const Mat &reference, const Mat &target, Mat &result,
-                          double &alignmentQuality) {
-        Mat refProcessed = preprocess(reference);
-        Mat targetProcessed = preprocess(target);
-
-        // 特征点检测和匹配
-        Ptr<Feature2D> orb = ORB::create(config.maxFeatures);
-        std::vector<KeyPoint> keypointsRef, keypointsTarget;
-        Mat descriptorsRef, descriptorsTarget;
-
-#if USE_OPENCL
-        if (config.useOpenCL && ocl::haveOpenCL()) {
-            LOGE(LOG_TAG,
-                 "---------------------------> 使用 OpenCL 加速特征检测和计算 <--------------------------- ");
-            // 使用 OpenCL 加速特征检测和计算
-            UMat uRefProcessed = refProcessed.getUMat(ACCESS_READ);
-            UMat uTargetProcessed = targetProcessed.getUMat(ACCESS_READ);
-            UMat uDescriptorsRef, uDescriptorsTarget;
-
-            orb->detectAndCompute(uRefProcessed, noArray(), keypointsRef, uDescriptorsRef);
-            orb->detectAndCompute(uTargetProcessed, noArray(), keypointsTarget,
-                                  uDescriptorsTarget);
-
-            uDescriptorsRef.copyTo(descriptorsRef);
-            uDescriptorsTarget.copyTo(descriptorsTarget);
-        } else {
-#endif
-            orb->detectAndCompute(refProcessed, noArray(), keypointsRef, descriptorsRef);
-            orb->detectAndCompute(targetProcessed, noArray(), keypointsTarget,
-                                  descriptorsTarget);
-#if USE_OPENCL
-        }
-#endif
-
-        // 使用 Brute-Force matcher 进行特征匹配
-        Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(
-                "BruteForce-Hamming");
-        std::vector<std::vector<DMatch>> knnMatches;
-        matcher->knnMatch(descriptorsRef, descriptorsTarget, knnMatches, 2);
-
-        // 应用比率测试来筛选好的匹配点
-        std::vector<DMatch> goodMatches;
-        const float ratioThresh = 0.75f;
-        for (size_t i = 0; i < knnMatches.size(); i++) {
-            if (knnMatches[i][0].distance < ratioThresh * knnMatches[i][1].distance) {
-                goodMatches.push_back(knnMatches[i][0]);
-            }
-        }
-        // 检查是否有足够的好匹配点
-        if (goodMatches.size() < 10) {
-            LOGD(LOG_TAG, "Not enough good matches found. Matches : %d ", goodMatches.size());
-            return false;
-        }
-
-        std::vector<Point2f> pointsRef, pointsTarget;
-        for (const auto &match: goodMatches) {
-            pointsRef.push_back(keypointsRef[match.queryIdx].pt);
-            pointsTarget.push_back(keypointsTarget[match.trainIdx].pt);
-        }
-
-        // 使用RANSAC估计变换矩阵
-        std::vector<uchar> inliersMask;
-        Mat H = findHomography(pointsTarget, pointsRef, RANSAC,
-                               config.ransacReprojThreshold, inliersMask);
-
-        // 计算内点比例
-        float inlierRatio = static_cast<float>(sum(inliersMask)[0]) / inliersMask.size();
-        if (inlierRatio < 0.5f) {
-            LOGD(LOG_TAG, "Inlier ratio too low. Ratio: %f ", inlierRatio);
-            return false;
-        }
-        Mat targetGray, warpedTargetGray, referenceGray, warpedTarget;
-        cvtColor(target, targetGray, CV_BGR2GRAY);
-        cvtColor(reference, referenceGray, CV_BGR2GRAY);
-        warpPerspective(target, warpedTarget, H, target.size());
-        Mat warpMatrix = Mat::eye(3, 3, CV_32F);
-
-        // 使用ECC细化对齐
-        try {
-            cvtColor(warpedTarget, warpedTargetGray, CV_BGR2GRAY);
-            // 确保图像类型一致
-            double ecc = findTransformECC(
-                    referenceGray, warpedTargetGray, warpMatrix, MOTION_HOMOGRAPHY,
-                    TermCriteria(TermCriteria::COUNT + TermCriteria::EPS,
-                                 config.eccIterations, config.eccEpsilon)
-            );
-            LOGW(LOG_TAG, "使用ECC细化对齐 ecc = %f ", ecc);
-            alignmentQuality = ecc;
-            // 检查对齐质量
-            if (alignmentQuality < config.alignmentThreshold) {
-                return false;
-            }
-            warpPerspective(warpedTarget, result, warpMatrix, warpedTarget.size(),
-                            INTER_LINEAR + WARP_INVERSE_MAP);
-        } catch (Exception &e) {
-            LOGE(LOG_TAG, "使用ECC细化对齐  e =  %s", e.what());
-            warpMatrix = H;
-            alignmentQuality = 0.5;
-        }
-        return true;
-    }
+//    bool alignSingleImage(const Mat &reference, const Mat &target, Mat &result,
+//                          double &alignmentQuality) {
+//        Mat refProcessed = preprocess(reference);
+//        Mat targetProcessed = preprocess(target);
+//
+//        // 特征点检测和匹配
+//        Ptr<Feature2D> orb = ORB::create(config.maxFeatures);
+//        std::vector<KeyPoint> keypointsRef, keypointsTarget;
+//        Mat descriptorsRef, descriptorsTarget;
+//
+//#if USE_OPENCL
+//        if (config.useOpenCL && ocl::haveOpenCL()) {
+//            LOGE(LOG_TAG,
+//                 "---------------------------> 使用 OpenCL 加速特征检测和计算 <--------------------------- ");
+//            // 使用 OpenCL 加速特征检测和计算
+//            UMat uRefProcessed = refProcessed.getUMat(ACCESS_READ);
+//            UMat uTargetProcessed = targetProcessed.getUMat(ACCESS_READ);
+//            UMat uDescriptorsRef, uDescriptorsTarget;
+//
+//            orb->detectAndCompute(uRefProcessed, noArray(), keypointsRef, uDescriptorsRef);
+//            orb->detectAndCompute(uTargetProcessed, noArray(), keypointsTarget,
+//                                  uDescriptorsTarget);
+//
+//            uDescriptorsRef.copyTo(descriptorsRef);
+//            uDescriptorsTarget.copyTo(descriptorsTarget);
+//        } else {
+//#endif
+//            orb->detectAndCompute(refProcessed, noArray(), keypointsRef, descriptorsRef);
+//            orb->detectAndCompute(targetProcessed, noArray(), keypointsTarget,
+//                                  descriptorsTarget);
+//#if USE_OPENCL
+//        }
+//#endif
+//
+//        // 使用 Brute-Force matcher 进行特征匹配
+//        Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(
+//                "BruteForce-Hamming");
+//        std::vector<std::vector<DMatch>> knnMatches;
+//        matcher->knnMatch(descriptorsRef, descriptorsTarget, knnMatches, 2);
+//
+//        // 应用比率测试来筛选好的匹配点
+//        std::vector<DMatch> goodMatches;
+//        const float ratioThresh = 0.75f;
+//        for (size_t i = 0; i < knnMatches.size(); i++) {
+//            if (knnMatches[i][0].distance < ratioThresh * knnMatches[i][1].distance) {
+//                goodMatches.push_back(knnMatches[i][0]);
+//            }
+//        }
+//        // 检查是否有足够的好匹配点
+//        if (goodMatches.size() < 10) {
+//            LOGD(LOG_TAG, "Not enough good matches found. Matches : %d ", goodMatches.size());
+//            return false;
+//        }
+//
+//        std::vector<Point2f> pointsRef, pointsTarget;
+//        for (const auto &match: goodMatches) {
+//            pointsRef.push_back(keypointsRef[match.queryIdx].pt);
+//            pointsTarget.push_back(keypointsTarget[match.trainIdx].pt);
+//        }
+//
+//        // 使用RANSAC估计变换矩阵
+//        std::vector<uchar> inliersMask;
+//        Mat H = findHomography(pointsTarget, pointsRef, RANSAC,
+//                               config.ransacReprojThreshold, inliersMask);
+//
+//        // 计算内点比例
+//        float inlierRatio = static_cast<float>(sum(inliersMask)[0]) / inliersMask.size();
+//        if (inlierRatio < 0.5f) {
+//            LOGD(LOG_TAG, "Inlier ratio too low. Ratio: %f ", inlierRatio);
+//            return false;
+//        }
+//        Mat targetGray, warpedTargetGray, referenceGray, warpedTarget;
+//        cvtColor(target, targetGray, CV_BGR2GRAY);
+//        cvtColor(reference, referenceGray, CV_BGR2GRAY);
+//        warpPerspective(target, warpedTarget, H, target.size());
+//        Mat warpMatrix = Mat::eye(3, 3, CV_32F);
+//
+//        // 使用ECC细化对齐
+//        try {
+//            cvtColor(warpedTarget, warpedTargetGray, CV_BGR2GRAY);
+//            // 确保图像类型一致
+//            double ecc = findTransformECC(
+//                    referenceGray, warpedTargetGray, warpMatrix, MOTION_HOMOGRAPHY,
+//                    TermCriteria(TermCriteria::COUNT + TermCriteria::EPS,
+//                                 config.eccIterations, config.eccEpsilon)
+//            );
+//            LOGW(LOG_TAG, "使用ECC细化对齐 ecc = %f ", ecc);
+//            alignmentQuality = ecc;
+//            // 检查对齐质量
+//            if (alignmentQuality < config.alignmentThreshold) {
+//                return false;
+//            }
+//            warpPerspective(warpedTarget, result, warpMatrix, warpedTarget.size(),
+//                            INTER_LINEAR + WARP_INVERSE_MAP);
+//        } catch (Exception &e) {
+//            LOGE(LOG_TAG, "使用ECC细化对齐  e =  %s", e.what());
+//            warpMatrix = H;
+//            alignmentQuality = 0.5;
+//        }
+//        return true;
+//    }
 
     /**
      * 对齐图片
@@ -283,10 +283,12 @@ private:
                         .size(), INTER_LINEAR + WARP_INVERSE_MAP);
             }
             return alignedImg;
-        } catch (cv::Exception &e) {
-            LOGE(LOG_TAG, "alignImgEcc , e = %s", e.what());
-            return alignedImg;
-        } catch (...) {
+        } 
+//        catch (cv::Exception &e) {
+//            LOGE(LOG_TAG, "alignImgEcc , e = %s", e.what());
+//            return alignedImg;
+//        } 
+        catch (...) {
             LOGE(LOG_TAG, "alignImgEcc error");
             return alignedImg;
         }
