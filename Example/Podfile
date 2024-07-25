@@ -15,3 +15,16 @@ target 'GHLightInference_Example' do
   pod 'HandyJSON', :git => 'git@github.com:alibaba/HandyJSON.git', :tag => '5.0.2'
   
 end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      if target.name == 'HandyJSON-watchOS' || target.name == 'HandyJSON-iOS' || target.name == 'HandyJSON'
+        target.build_configurations.each do |config|
+          config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+          config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+        end
+      end
+    end
+  end
+end
