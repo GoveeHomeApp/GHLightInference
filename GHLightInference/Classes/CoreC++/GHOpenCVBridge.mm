@@ -106,6 +106,9 @@ vector<LightPoint> resLp;
 }
 - (UIImage *)alignmentWithImage:(UIImage *)image step:(NSInteger)stepCount rotation:(BOOL)isRotate error:(void (^)(NSString * _Nonnull))errorBlock {
     try {
+        if (stepCount == 0) {
+            releaseAll();
+        }
         self.alignStep = stepCount;
         int ste = (int)stepCount;
         Mat aliMat = [self cvMatFromUIImage:image];
