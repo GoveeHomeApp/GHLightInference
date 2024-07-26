@@ -705,7 +705,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
 
     try {
         bool enable4BeginLeft = true;//起点往前补点
-        for (auto it = totalPoints.begin(); it < totalPoints.end(); ++it) {
+        for (auto it = totalPoints.begin(); it != totalPoints.end(); ++it) {
             auto beginLP = totalPoints.begin();
             auto endLP = totalPoints.end();
             if (it == beginLP) {
