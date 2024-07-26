@@ -50,12 +50,12 @@ EnhancedChristmasTreeAligner aligner;
  * @param originalMat 输入原图
  * @return
  */
-Mat alignResize(int frameStep, Mat &originalMat,vector<Mat> &outMats) {
+Mat alignResize(int frameStep, Mat &originalMat, vector<Mat> &outMats) {
     Mat srcResize, alignMat;
     // 指定缩放后的尺寸
     Size newSize(640, 640);
     if (frameStep > STEP_VALID_FRAME_START) {
-        alignMat = aligner.alignImage(frameStepMap[STEP_VALID_FRAME_START], originalMat,outMats);
+        alignMat = aligner.alignImage(frameStepMap[STEP_VALID_FRAME_START], originalMat, outMats);
         if (alignMat.empty()) {
             return alignMat;
         }
@@ -80,8 +80,8 @@ void signal_handler(int signal) {
     longjmp(jump_buffer, 1);
 }
 
-void releaseFrameStepMap(unordered_map<int, cv::Mat>& map) {
-    for (auto& pair : map) {
+void releaseFrameStepMap(unordered_map<int, cv::Mat> &map) {
+    for (auto &pair: map) {
         pair.second.release();  // 显式释放每个 Mat 对象
     }
     map.clear();  // 清空 map
@@ -150,7 +150,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
     vector<LightPoint> findVector = findColorType(frameStepMap[frameStep], frameStep, pPoints,
                                                   outMats);
     pointsStepMap[frameStep] = findVector;
-    LOGD(LOG_TAG, "pointsStepMap frameStep=%d getMaxStepCnt=%d", frameStep, getMaxStepCnt());
+    LOGD(LOG_TAG, "pointsStepMap frameStep=%d pointsStepMap=%d getMaxStepCnt=%d", frameStep,pointsStepMap.size(), getMaxStepCnt());
     if (pointsStepMap.size() == getMaxStepCnt()) {
         //--------------------------------------- 开始识别 ---------------------------------------
         vector<Point2f> trapezoid4Points;
@@ -457,9 +457,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
     vector<int> sameColorScore = getSameColorVector();
     //消除
     if (lightType != TYPE_H682X) {
-        Mat out = src.clone();
         vector<int> eraseVector = polyPoints(pPointXys, 3, 2.3);
-        outMats.push_back(out);
         sort(eraseVector.begin(), eraseVector.end(), std::greater<int>());
         for (int index: eraseVector) {
             auto erasePoint = pPoints.begin() + index;
@@ -700,13 +698,14 @@ decisionCenterPoints(vector<LightPoint> &input, double averageDistance) {
  * 从红绿固定点和错点中推测点位
  */
 void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoints) {
-    if (totalPoints.size() < 4)  return;
-    sort(totalPoints.begin(), totalPoints.end(),
-         [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
+    if (totalPoints.size() < 4) return;
+    sort(totalPoints.begin(), totalPoints.end(), [](const LightPoint &a, const LightPoint &b) {
+        return a.label < b.label;
+    });
 
     try {
         bool enable4BeginLeft = true;//起点往前补点
-        for (auto it = totalPoints.begin(); it <= totalPoints.end(); ++it) {
+        for (auto it = totalPoints.begin(); it < totalPoints.end(); ++it) {
             auto beginLP = totalPoints.begin();
             auto endLP = totalPoints.end();
             if (it == beginLP) {
@@ -828,7 +827,17 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                     break;
                 }
                 it = newPosition;
-                if (it->label > getIcNum()) {
+                // 添加安全检查
+                if (it >= totalPoints.end()) {
+                    break;
+                }
+                // 使用安全的方式访问 label
+                try {
+                    if (it->label > getIcNum()) {
+                        break;
+                    }
+                } catch (const std::exception& e) {
+                    LOGE(LOG_TAG, "访问 label 时发生异常: %s", e.what());
                     break;
                 }
             }

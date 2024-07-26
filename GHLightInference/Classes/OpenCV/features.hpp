@@ -58,7 +58,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
  * @param originalMat 输入原图
  * @return
  */
-Mat alignResize(int frameStep, Mat &originalMat,vector<Mat> &outMats);
+Mat alignResize(int frameStep, Mat &originalMat, vector <Mat> &outMats);
 
 /**
  * 根据定义好的步骤进行灯带排序
