@@ -350,16 +350,16 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 //            vector<Group> groups = groupLightPoints(processor.totalPoints);
             //计算所有中断的组的间隔，缺失端时前段的1.5倍，则视作有问题
 //            vector<GapInfo> gapInfos = analyzeGaps(groups);
-            outMats.push_back(trapezoidMat);
+//            outMats.push_back(trapezoidMat);
         } else {
 //            processor.totalPoints = completeLightPoints2D(processor.totalPoints, getIcNum());
             //    // 使用多项式拟合补全点
-            vector<LightPoint> polyPoints = interpolateAndExtrapolatePoints(processor.totalPoints,
-                                                                            getIcNum());
-            Mat image = src.clone();
-            drawPolynomialPoints(image, polyPoints, cv::Scalar(0, 255, 0));  // 绿色
-            outMats.push_back(image);
-            processor.totalPoints = polyPoints;
+            try {
+                processor.totalPoints  = interpolateAndExtrapolatePoints(processor.totalPoints,
+                                                             getIcNum());
+            } catch (...) {
+                LOGE(LOG_TAG, "interpolateAndExtrapolatePoints error");
+            }
         }
     } else {
         try {
@@ -441,8 +441,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
         LOGD(LOG_TAG, "h682x推断条数 size = %d add = %d ", size,
              processor.totalPoints.size() - size);
     }
-
-    drawPointsMatOut(src, processor, outMats);
+//    drawPointsMatOut(src, processor, outMats);
     return processor;
 }
 
@@ -823,16 +822,15 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                 }
                 int offset = nextRightAdd + lastLeftAdd;
                 auto newPosition = std::next(it, offset);
+                if (newPosition >= totalPoints.end()) {
+                    break;
+                }
+                it = newPosition;
                 // 注意边界判断
                 int dis = totalPoints.end() - it - 1;
                 if (dis >= totalPoints.size()) {
                     break;
                 }
-                
-                if (newPosition >= totalPoints.end()) {
-                    break;
-                }
-                it = newPosition;
                 // 添加安全检查
                 if (it >= totalPoints.end()) {
                     break;
@@ -978,7 +976,7 @@ void decisionRemainingPoints(LampBeadsProcessor &processor) {
                 }
             }
         }
-        LOGE(LOG_TAG, "处理剩余无序点位 补充:  %d", processor.totalPoints.size() - size);
+        LOGE(LOG_TAG, "处理剩余无序点位 补充:  %d totalPoints = %d", processor.totalPoints.size() - size,processor.totalPoints.size());
         if (processor.totalPoints.size() > 2) {
             // 按照y值从小到大排序
             sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
@@ -1282,7 +1280,6 @@ string lightPointsToJson(const vector<LightPoint> &points, int lightTypeSet) {
             ss << "\"endX\": " << floatToDouble(points[i].endPoint.x) << ", ";
             ss << "\"endY\": " << floatToDouble(points[i].endPoint.y) << ", ";
         }
-//        ss << "\"tfScore\": " << points[i].tfScore << ", ";
         ss << "\"index\": " << points[i].label;
         ss << "}";
         if (i < points.size() - 1) {

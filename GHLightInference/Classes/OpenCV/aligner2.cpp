@@ -79,7 +79,7 @@ public:
         int width = input.cols / 3;
         int height = input.rows / 3;
 
-        Rect centerROI(centerX - width/2, centerY - height/2, width, height);
+        Rect centerROI(centerX - width / 2, centerY - height / 2, width, height);
         return input(centerROI).clone();
     }
 
@@ -91,7 +91,7 @@ public:
 #endif
     }
 
-    Mat alignImage(const Mat &firstImage, const Mat &image, vector <Mat> &outMats) {
+    Mat alignImage(const Mat &firstImage, const Mat &image, vector<Mat> &outMats) {
         if (image.empty()) return image;
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -278,7 +278,7 @@ private:
             rectangle(mask, searchRegion, Scalar::all(255), FILLED);
             //对齐精度
             double termination_eps2 = 0.0005;
-            int number_of_iterations2 = 60;
+            int number_of_iterations2 = 70;
             Mat im1Src, im2Trans;
             // 转换为灰度图
             cvtColor(src, im1Src, CV_BGR2GRAY);//CV_BGR2GRAY
