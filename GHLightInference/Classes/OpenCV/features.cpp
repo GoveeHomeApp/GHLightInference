@@ -759,7 +759,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                         }
                     }
                 }
-            } else if (it == endLP - 1 || it == endLP) {
+            } else if (it == endLP - 2 || it == endLP - 1) {
                 //倒数二个点
             } else {
                 int i = distance(totalPoints.begin(), it);
@@ -823,6 +823,12 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                 }
                 int offset = nextRightAdd + lastLeftAdd;
                 auto newPosition = std::next(it, offset);
+                // 注意边界判断
+                int dis = totalPoints.end() - it - 1;
+                if (dis >= totalPoints.size()) {
+                    break;
+                }
+                
                 if (newPosition >= totalPoints.end()) {
                     break;
                 }
