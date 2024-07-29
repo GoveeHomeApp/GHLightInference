@@ -759,7 +759,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                         }
                     }
                 }
-            } else if (it == endLP - 2 || it == endLP - 1) {
+            } else if (it == endLP - 1 || it == endLP) {
                 //倒数二个点
             } else {
                 int i = distance(totalPoints.begin(), it);
