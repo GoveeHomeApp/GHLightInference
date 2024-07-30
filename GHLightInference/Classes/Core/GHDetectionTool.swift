@@ -290,7 +290,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 self.preImageArray.append(scaleImage)
                 #if DEBUG
                 self.saveImageView.image = scaleImage
-                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
+//                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                 #endif
                 DispatchQueue.main.asyncAfter(deadline: .now()+0.1) {
                     self.capFinishHandler?()
@@ -480,7 +480,7 @@ extension GHDetectionTool {
                 DispatchQueue.main.async {
                     prepostProcessor.showDetection(imageView: self.imageView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
                     #if DEBUG
-                    self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+//                    self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                     #endif
                     var poArr: [PredictObject] = []
                     var ct = 0
@@ -601,7 +601,7 @@ extension GHDetectionTool {
                             let image = GHOpenCVBridge.shareManager().showLastOutlet()
                             self.finalImage = image
                             self.imageView.image = image
-                            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+//                            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
                             self.doneFailed()
