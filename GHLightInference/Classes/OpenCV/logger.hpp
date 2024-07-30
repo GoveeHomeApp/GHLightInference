@@ -24,8 +24,17 @@ public:
         L_WARNING,
         L_ERROR
     };
+    static void setLoggingEnabled(bool enabled) {
+        loggingEnabled = enabled;
+    }
+
+    static bool isLoggingEnabled() {
+        return loggingEnabled;
+    }
 
     static void log(LogLevel level, const char *tag, const char *format, ...) {
+        if (!loggingEnabled) return;
+
         va_list args;
         va_start(args, format);
 
@@ -72,6 +81,8 @@ public:
     }
 
 private:
+    static bool loggingEnabled;
+
     static const char *getLevelString(LogLevel level) {
         switch (level) {
             case LogLevel::L_VERBOSE:
@@ -89,6 +100,8 @@ private:
         }
     }
 };
+
+bool Logger::loggingEnabled = false;
 
 #define LOGV(TAG, ...) Logger::log(Logger::LogLevel::L_VERBOSE, TAG, __VA_ARGS__)
 #define LOGD(TAG, ...) Logger::log(Logger::LogLevel::L_DEBUG, TAG, __VA_ARGS__)
