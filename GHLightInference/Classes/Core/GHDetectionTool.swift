@@ -419,7 +419,7 @@ extension GHDetectionTool {
                     xr = p.x
                 }
             }
-            let width = (xr-xl)/2 - 50
+            let width = CGFloat((xr-xl)/2) * 0.2
             print("log.f ====== real half width\(width)")
             for p in points.trapezoidalPoints {
                 if p.pName == "lT" {
