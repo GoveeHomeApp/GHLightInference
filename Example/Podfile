@@ -1,37 +1,30 @@
 platform :ios, '13.0'
-use_frameworks!
+use_frameworks! :linkage => :static
+#use_modular_headers!
+inhibit_all_warnings!
+install! 'cocoapods',
+  :warn_for_unused_master_specs_repo => false,
+  :preserve_pod_file_structure => true
 
 source 'git@github.com:GoveeHomeApp/GHSpecs.git'
+source 'https://github.com/CocoaPods/Specs.git'
 
 target 'GHLightInference_Example' do
-
   pod 'GHLightInference', :path => '../'
-
+  pod 'LibTorch-Lite', '~>1.13.0.1'
+  pod 'HandyJSON', :git => 'git@github.com:alibaba/HandyJSON.git', :tag => '5.0.2'
+  
 end
 
-# post_install do |installer|
-#   search_modules(installer)
-# end
-
-# def search_modules(installer)
-#   modules = installer.pod_targets.map do |target|
-#     module_name = target.info_plist_entries["GHModular"]
-#   end
-#   modules.compact!
-#   #puts modules
-  
-#   project_path = installer.aggregate_targets[0].user_project_path
-#   #puts "#{project_path}"
-#   project = Xcodeproj::Project.open(project_path)
-#   project_dir_path = project.project_dir
-#   target = project.targets[0]
-#   config = target.build_configurations[0]
-#   settings = config.build_settings
-#   info_plist_name = settings["INFOPLIST_FILE"]
-#   info_plist_path = "#{project_dir_path}/#{info_plist_name}"
-#   puts info_plist_path
-#   info_plist = Xcodeproj::Plist.read_from_path(info_plist_path)
-#   info_plist["GHModules"] = modules
-#   #puts info_plist
-#   Xcodeproj::Plist.write_to_path(info_plist, info_plist_path)
-# end
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      if target.name == 'HandyJSON-watchOS' || target.name == 'HandyJSON-iOS' || target.name == 'HandyJSON'
+        target.build_configurations.each do |config|
+          config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+          config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+        end
+      end
+    end
+  end
+end
