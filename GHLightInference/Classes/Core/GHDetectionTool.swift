@@ -598,9 +598,9 @@ extension GHDetectionTool {
                             self.doneNotice?(detectionResult)
                             self.transaction = nil
                             #if DEBUG
-                            let image = GHOpenCVBridge.shareManager().showLastOutlet()
-                            self.finalImage = image
-                            self.imageView.image = image
+//                            let image = GHOpenCVBridge.shareManager().showLastOutlet()
+//                            self.finalImage = image
+//                            self.imageView.image = image
 //                            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
