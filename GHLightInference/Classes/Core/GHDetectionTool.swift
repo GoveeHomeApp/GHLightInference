@@ -29,6 +29,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public private(set) var interruptHandler: (() -> Void)?
     // 取帧（第几步 ps:第几次取帧 从序号1开始）
     public private(set) var frameHandler:((Int) -> Void)?
+    // AVCaptureDevice 相关参数调整
+    public private(set) var exposureTargetBiasHandler:((Double) -> Void)?
+    
     
     /* ========== 私有closure ========== */
     private var capFinishHandler: (() -> Void)?
@@ -54,6 +57,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // 取帧相关
     var captureSession: AVCaptureSession!
     var videoOutput: AVCaptureVideoDataOutput!
+    var captureDevice: AVCaptureDevice!
     // 业务层直接拿的展示Layer
     public private(set) var previewLayer: AVCaptureVideoPreviewLayer?
     // 取帧参数
@@ -105,6 +109,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         // 获取当前摄像头输入 => 获取失败回调异常
         guard let videoDevice = AVCaptureDevice.default(for: .video) else { finishHandler?(false); return }
         guard let videoInput = try? AVCaptureDeviceInput(device: videoDevice) else { finishHandler?(false); return }
+        
+        self.captureDevice = videoDevice
         
         if captureSession.canAddInput(videoInput) {
             captureSession.addInput(videoInput)
@@ -164,6 +170,24 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
     // 绑定接收回调
     func setupBindings() {
+        
+        // -1最暗 1最亮
+        self.exposureTargetBiasHandler = { [weak self] expBias in
+            guard let `self` = self else { return }
+            if self.captureDevice.isExposureModeSupported(.autoExpose) && self.captureDevice.isExposurePointOfInterestSupported {
+                // 设备支持亮度调节
+                do {
+                    try self.captureDevice.lockForConfiguration()
+                    self.captureDevice.setExposureTargetBias(Float(expBias), completionHandler: nil) // 调整亮度到中间值
+                    self.captureDevice.unlockForConfiguration()
+                } catch {
+                    print("无法锁定设备配置以进行亮度调节")
+                }
+            } else {
+                print("此设备不支持亮度调节")
+            }
+        }
+        
         // 开始回调
         self.startHandler = { [weak self] sessionId in
             guard let `self` = self else { return }
