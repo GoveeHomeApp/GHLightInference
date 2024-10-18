@@ -34,7 +34,11 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
     
     /* ========== 私有closure ========== */
+    // 是否为识别流程中的cap
     private var capFinishHandler: (() -> Void)?
+    // 是否在当前识别流程内 => 通过transaction去判断
+    // 间隔2s识别一次
+    var queue: DispatchQueue?
     
     // 识别流程唯一transaction 每次整体流程都是唯一的 结束会被置空
     private var transaction: String? {
@@ -91,6 +95,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.setupBindings()
         // 启动AVFoundation
         self.startingIFrame()
+        
+        self.rollingCheck()
     }
     
     // 初始化AVCaptureSession
@@ -307,20 +313,31 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         // 实时帧回调 这里只根据 业务侧closure回调取当前帧图像
         if self.needGetFrame {
-            print("\n log.f ============= 开始取一帧")
-            if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer),let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
-                print("log.f ====== width\(image.size.width) height\(image.size.height)")
-                self.sc = (image.size.width, image.size.height)
-                self.preImageArray.append(scaleImage)
-                #if DEBUG
-                self.saveImageView.image = scaleImage
-//                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
-                #endif
-                DispatchQueue.main.asyncAfter(deadline: .now()+0.1) {
-                    self.capFinishHandler?()
+            if let _ = self.transaction {
+                print("\n log.f ============= 开始取一帧")
+                if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer),let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
+                    print("log.f ====== width\(image.size.width) height\(image.size.height)")
+                    self.sc = (image.size.width, image.size.height)
+                    self.preImageArray.append(scaleImage)
+                    #if DEBUG
+                    self.saveImageView.image = scaleImage
+                    //                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
+                    #endif
+                    DispatchQueue.main.asyncAfter(deadline: .now()+0.1) {
+                        self.capFinishHandler?()
+                    }
                 }
+                self.needGetFrame = false
+            } else {
+                // 只识别 不跑业务
+                if let preLayer = self.previewLayer, let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer) {
+                    
+                    if let scaleImage = scaleImage(image, toSize: CGSize(width: preLayer.frame.size.width, height: preLayer.frame.size.width)) {
+                        self.runDetectionOnly(image: scaleImage)
+                    }
+                }
+                self.needGetFrame = false
             }
-            self.needGetFrame = false
         }
     }
     // 牺牲质量放缩
@@ -637,4 +654,81 @@ extension GHDetectionTool {
             self.doneFailed()
         }
     }
+}
+
+// 单体识别流程 不包含 对齐及推断的业务逻辑
+extension GHDetectionTool {
+    
+    // 识别灯珠
+    func runDetectionOnly(image: UIImage) {
+        // 只对第一张图进行识别
+        if let prepostProcessor = self.prepostProcessor{
+            self.imageView.image = image
+            let imgScaleX = Double(image.size.width / CGFloat(prepostProcessor.inputWidth));
+            let imgScaleY = Double(image.size.height / CGFloat(prepostProcessor.inputHeight));
+            let ivScaleX : Double = (image.size.width > image.size.height ? Double(imageView.frame.size.width / image.size.width) : Double(imageView.frame.size.height / image.size.height))
+            let ivScaleY : Double = (image.size.height > image.size.width ? Double(imageView.frame.size.height / image.size.height) : Double(imageView.frame.size.width / image.size.width))
+            let startX = Double((imageView.frame.size.width - CGFloat(ivScaleX) * image.size.width)/2)
+            let startY = Double((imageView.frame.size.height -  CGFloat(ivScaleY) * image.size.height)/2)
+            guard var pixelBuffer = image.normalized() else { return }
+            DispatchQueue.global().async {
+                if let op = self.inferencer.module.detect(image: &pixelBuffer), op.count > 0 {
+                    // 预测数据
+                    let nmsPredictions = prepostProcessor.outputsToNMSPredictions(outputs: op, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
+                    // 回调主线程绘图
+                    DispatchQueue.main.async {
+                        self.showDetectionOnLayer(nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
+                    }
+                }
+            }
+        } else {
+            self.doneFailed()
+        }
+    }
+    
+    func showDetectionOnLayer(nmsPredictions: [Prediction], classes: [String]) {
+        debugPrint("Total object \(nmsPredictions.count)")
+        self.previewLayer?.sublayers.flatMap { $0.map { $0.removeFromSuperlayer() } }
+        for pred in nmsPredictions {
+            let index = classes[pred.classIndex]
+            switch index {
+            case "red":
+                let bbox = UIView(frame: pred.rect)
+                bbox.backgroundColor = UIColor.clear
+                bbox.layer.borderColor = UIColor.red.cgColor
+                bbox.layer.borderWidth = 1
+                if pred.score > 0.20 {
+                    self.previewLayer?.addSublayer(bbox.layer)
+                }
+            case "green":
+                let bbox = UIView(frame: pred.rect)
+                bbox.backgroundColor = UIColor.clear
+                bbox.layer.borderColor = UIColor.green.cgColor
+                bbox.layer.borderWidth = 1
+                if pred.score > 0.20 {
+                    self.previewLayer?.addSublayer(bbox.layer)
+                }
+            default:
+                break
+            }
+        }
+    }
+    
+    // 当transaction为nil时 逻辑跳过
+    func rollingCheck() {
+        // 创建一个每60秒触发一次的DispatchQueue
+        queue = DispatchQueue(label: "com.govee.goveehome.light_inferrer_timer", qos: .default, attributes: .init(), autoreleaseFrequency: .workItem, target: .global(qos: .default))
+ 
+        queue?.async { [weak self] in
+            guard let `self` = self else { return }
+            while true {
+                debugPrint("log.p ===== Tool 识别定时任务执行 - \(Date())")
+                if let tra = self.transaction {} else {
+                    self.captureOneFrame()
+                }
+                sleep(3) // 休眠60秒
+            }
+        }
+    }
+    
 }
