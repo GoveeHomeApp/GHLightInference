@@ -21,6 +21,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public var frameNotice: ((DetectionEffectModel) -> Void)?
     // 完成Notice
     public var doneNotice: ((DetectionResult?) -> Void)?
+    // 识别流程外 取第一帧Notice（注意此closure不可以出现在识别流程中）
+    public var showCurrentNotice: ((DetectionEffectModel) -> Void)?
     
     /* ========== 业务层回调closure ========== */
     // 开始 & 重新开始 带有transaction
@@ -31,6 +33,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public private(set) var frameHandler:((Int) -> Void)?
     // AVCaptureDevice 相关参数调整
     public private(set) var exposureTargetBiasHandler:((Double) -> Void)?
+    // 识别流程外当前调整亮度或者对比度下展示识别第一帧结果（注意此closure不可以出现在识别流程中）
+    public private(set) var showCurrentHandler:((CGRect) -> Void)?
     
     
     /* ========== 私有closure ========== */
@@ -39,6 +43,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // 是否在当前识别流程内 => 通过transaction去判断
     // 间隔2s识别一次
     var queue: DispatchQueue?
+    private var realFrame: CGRect = .zero
     
     // 识别流程唯一transaction 每次整体流程都是唯一的 结束会被置空
     private var transaction: String? {
@@ -96,7 +101,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         // 启动AVFoundation
         self.startingIFrame()
         
-        self.rollingCheck()
+//        self.rollingCheck()
     }
     
     // 初始化AVCaptureSession
@@ -176,6 +181,28 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     
     // 绑定接收回调
     func setupBindings() {
+        
+        // 调整亮度 就会调用这个
+        self.showCurrentHandler = { [weak self] cz in
+            guard let `self` = self else { return }
+            let colorTwoDimArray = GHOpenCVBridge.shareManager().getColorsByStep(0)
+            var greenArray: [Int] = []
+            if colorTwoDimArray.count > 0 {
+                greenArray = colorTwoDimArray[0].compactMap { $0.intValue }
+            }
+            var redArray: [Int] = []
+            if colorTwoDimArray.count > 1 {
+                redArray = colorTwoDimArray[1].compactMap { $0.intValue }
+            }
+            if greenArray.count > 0 && redArray.count > 0 {
+                let effectModel = createEffectModel(step: 0, greenArray: greenArray, redArray: redArray)
+                self.showCurrentNotice?(effectModel)
+                // 两秒之后 调用识别展示
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    self.captureOneFrame()
+                }
+            }
+        }
         
         // -1最暗 1最亮
         self.exposureTargetBiasHandler = { [weak self] expBias in
@@ -688,7 +715,6 @@ extension GHDetectionTool {
     
     func showDetectionOnLayer(nmsPredictions: [Prediction], classes: [String]) {
         debugPrint("Total object \(nmsPredictions.count)")
-        self.previewLayer?.sublayers.flatMap { $0.map { $0.removeFromSuperlayer() } }
         for pred in nmsPredictions {
             let index = classes[pred.classIndex]
             switch index {
@@ -724,7 +750,7 @@ extension GHDetectionTool {
             while true {
                 debugPrint("log.p ===== Tool 识别定时任务执行 - \(Date())")
                 if let tra = self.transaction {} else {
-                    self.captureOneFrame()
+                    
                 }
                 sleep(3) // 休眠60秒
             }
