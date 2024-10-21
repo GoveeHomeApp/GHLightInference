@@ -35,6 +35,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public private(set) var exposureTargetBiasHandler:((Double) -> Void)?
     // 识别流程外当前调整亮度或者对比度下展示识别第一帧结果（注意此closure不可以出现在识别流程中）
     public private(set) var showCurrentHandler:((CGRect) -> Void)?
+    // 业务层结束了 停止轮询识别
+    public private(set) var stopReconHandler:(() -> Void)?
+    
     
     
     /* ========== 私有closure ========== */
@@ -43,7 +46,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // 是否在当前识别流程内 => 通过transaction去判断
     // 间隔2s识别一次
     var queue: DispatchQueue?
-    private var realFrame: CGRect = .zero
+    private var realFrame: CGRect?
     
     // 识别流程唯一transaction 每次整体流程都是唯一的 结束会被置空
     private var transaction: String? {
@@ -101,7 +104,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         // 启动AVFoundation
         self.startingIFrame()
         
-//        self.rollingCheck()
+        self.rollingCheck()
     }
     
     // 初始化AVCaptureSession
@@ -182,6 +185,11 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // 绑定接收回调
     func setupBindings() {
         
+        self.stopReconHandler = { [weak self] in
+            guard let `self` = self else { return }
+            self.queue = nil
+        }
+        
         // 调整亮度 就会调用这个
         self.showCurrentHandler = { [weak self] cz in
             guard let `self` = self else { return }
@@ -197,10 +205,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             if greenArray.count > 0 && redArray.count > 0 {
                 let effectModel = createEffectModel(step: 0, greenArray: greenArray, redArray: redArray)
                 self.showCurrentNotice?(effectModel)
-                // 两秒之后 调用识别展示
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    self.captureOneFrame()
-                }
+                self.realFrame = cz
             }
         }
         
@@ -358,9 +363,10 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             } else {
                 // 只识别 不跑业务
                 if let preLayer = self.previewLayer, let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer) {
-                    
-                    if let scaleImage = scaleImage(image, toSize: CGSize(width: preLayer.frame.size.width, height: preLayer.frame.size.width)) {
-                        self.runDetectionOnly(image: scaleImage)
+                    if let fra = self.realFrame {
+                        if let scaleImage = scaleImage(image, toSize: CGSize(width: fra.width, height: fra.height)) {
+                            self.runDetectionOnly(image: scaleImage)
+                        }
                     }
                 }
                 self.needGetFrame = false
@@ -691,6 +697,7 @@ extension GHDetectionTool {
         // 只对第一张图进行识别
         if let prepostProcessor = self.prepostProcessor{
             self.imageView.image = image
+            self.imageView.frame = self.realFrame!
             let imgScaleX = Double(image.size.width / CGFloat(prepostProcessor.inputWidth));
             let imgScaleY = Double(image.size.height / CGFloat(prepostProcessor.inputHeight));
             let ivScaleX : Double = (image.size.width > image.size.height ? Double(imageView.frame.size.width / image.size.width) : Double(imageView.frame.size.height / image.size.height))
@@ -747,13 +754,13 @@ extension GHDetectionTool {
  
         queue?.async { [weak self] in
             guard let `self` = self else { return }
-            while true {
-                debugPrint("log.p ===== Tool 识别定时任务执行 - \(Date())")
-                if let tra = self.transaction {} else {
-                    
-                }
-                sleep(3) // 休眠60秒
-            }
+//            while self {
+//                debugPrint("log.p ===== Tool 识别定时任务执行 - \(Date())")
+//                if let tra = self.transaction {} else {
+//                    self.captureOneFrame()
+//                }
+//                sleep(3) // 休眠60秒
+//            }
         }
     }
     
