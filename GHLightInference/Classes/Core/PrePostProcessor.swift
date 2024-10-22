@@ -139,7 +139,7 @@ public class PrePostProcessor : NSObject {
                 
                 var max = Double(truncating: outputs[i*outputColumn+5])
                 var cls = 0
-                for j in 0 ..< outputColumn-5 {   
+                for j in 0 ..< outputColumn-5 {
                     if Double(truncating: outputs[i*outputColumn+5+j]) > max {
                         max = Double(truncating: outputs[i*outputColumn+5+j])
                         cls = j
@@ -183,7 +183,6 @@ public class PrePostProcessor : NSObject {
                 }
 
                 let rect = CGRect(x: startX+ivScaleX*left, y: startY+top*ivScaleY, width: ivScaleX*(right-left), height: ivScaleY*(bottom-top))
-                
                 let prediction = Prediction(classIndex: cls, score: Float(truncating: outputs[i*outputColumn+4]), rect: rect, x: Int(x), y: Int(y), w: Int(w), h: Int(h))
                 predictions.append(prediction)
             }
@@ -233,6 +232,35 @@ public class PrePostProcessor : NSObject {
             }
         }
     }
+    
+    public func showPreDetection(view: UIView, nmsPredictions: [Prediction], classes: [String]) {
+        debugPrint("Total object \(nmsPredictions.count)")
+        view.subviews.map { $0.removeFromSuperview() }
+        for pred in nmsPredictions {
+            let index = classes[pred.classIndex]
+            switch index {
+            case "red":
+                let bbox = UIView(frame: pred.rect)
+                bbox.backgroundColor = UIColor.clear
+                bbox.layer.borderColor = UIColor.red.cgColor
+                bbox.layer.borderWidth = 1
+                if pred.score > 0.20 {
+                    view.addSubview(bbox)
+                }
+            case "green":
+                let bbox = UIView(frame: pred.rect)
+                bbox.backgroundColor = UIColor.clear
+                bbox.layer.borderColor = UIColor.green.cgColor
+                bbox.layer.borderWidth = 1
+                if pred.score > 0.20 {
+                    view.addSubview(bbox)
+                }
+            default:
+                break
+            }
+        }
+    }
+    
 
 }
 

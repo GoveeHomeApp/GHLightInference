@@ -34,7 +34,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // AVCaptureDevice 相关参数调整
     public private(set) var exposureTargetBiasHandler:((Double) -> Void)?
     // 识别流程外当前调整亮度或者对比度下展示识别第一帧结果（注意此closure不可以出现在识别流程中）
-    public private(set) var showCurrentHandler:((CGRect) -> Void)?
+    public private(set) var showCurrentHandler:((CGRect, UIView) -> Void)?
     // 业务层结束了 停止轮询识别
     public private(set) var stopReconHandler:(() -> Void)?
     
@@ -49,6 +49,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     var timer: DispatchSourceTimer?
     
     private var realFrame: CGRect?
+    private var backView: UIView?
+    private var rectView = UIView()
+    private var preImg: UIImage?
     
     // 识别流程唯一transaction 每次整体流程都是唯一的 结束会被置空
     private var transaction: String? {
@@ -106,7 +109,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         // 启动AVFoundation
         self.startingIFrame()
         self.queue = DispatchQueue(label: "com.govee.goveehome.light_inferrer_timer", qos: .default, attributes: .init(), autoreleaseFrequency: .workItem, target: .global(qos: .default))
-        self.startTimer()
+//        self.startTimer()
     }
     
     // 初始化AVCaptureSession
@@ -193,8 +196,10 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         }
         
         // 调整亮度 就会调用这个
-        self.showCurrentHandler = { [weak self] cz in
+        self.showCurrentHandler = { [weak self] (cz, v) in
             guard let `self` = self else { return }
+            self.backView = v
+            self.rectView.removeFromSuperview()
             let colorTwoDimArray = GHOpenCVBridge.shareManager().getColorsByStep(0)
             var greenArray: [Int] = []
             if colorTwoDimArray.count > 0 {
@@ -208,6 +213,12 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 let effectModel = createEffectModel(step: 0, greenArray: greenArray, redArray: redArray)
                 self.showCurrentNotice?(effectModel)
                 self.realFrame = cz
+                self.rectView.frame = cz
+                self.rectView.backgroundColor = UIColor.clear
+                self.backView?.addSubview(rectView)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now()+2) {
+                self.captureOneFrame()
             }
         }
         
@@ -349,7 +360,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         if self.needGetFrame {
             if let _ = self.transaction {
                 print("\n log.f ============= 开始取一帧")
-                if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer),let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
+                if let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer), let scaleImage = scaleImage(image, toSize: CGSize(width: 960, height: 1280)) {
                     print("log.f ====== width\(image.size.width) height\(image.size.height)")
                     self.sc = (image.size.width, image.size.height)
                     self.preImageArray.append(scaleImage)
@@ -366,8 +377,16 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 // 只识别 不跑业务
                 if let preLayer = self.previewLayer, let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer) {
                     if let fra = self.realFrame {
-                        if let scaleImage = scaleImage(image, toSize: CGSize(width: fra.width, height: fra.height)) {
-                            self.runDetectionOnly(image: scaleImage)
+                        self.saveImageView.image = image
+                        self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
+                        print("log.f ====== width \(fra.width) height \(fra.height)")
+                        if let rotat = image.rotated(by: .pi/2) {
+                            self.saveImageToAlbum(image: rotat)
+                            print("log.f ======  rotat image width \(rotat.size.width) rotat image height \(rotat.size.height)")
+                            self.preImg = rotat
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self.runDetection(false)
+                            }
                         }
                     }
                 }
@@ -421,6 +440,25 @@ extension GHDetectionTool {
 
 // MARK: local detection
 extension GHDetectionTool {
+    
+    func saveImageToAlbum(image: UIImage) {
+        PHPhotoLibrary.requestAuthorization { status in
+            if status == .authorized {
+                PHPhotoLibrary.shared().performChanges({
+                    let request = PHAssetChangeRequest.creationRequestForAsset(from: image)
+                    request.creationDate = Date()
+                }) { success, error in
+                    if success {
+                        print("图片已成功保存到相册")
+                    } else {
+                        print("保存图片失败: \(error?.localizedDescription ?? "未知错误")")
+                    }
+                }
+            } else {
+                print("用户未授权访问相册")
+            }
+        }
+    }
     
     func saveImageViewWithSubviewsToPhotoAlbum(imageView: UIImageView) {
         // 开始图形上下文
@@ -517,12 +555,15 @@ extension GHDetectionTool {
         return result
     }
     // 识别灯珠
-    func runDetection() {
+    func runDetection(_ isInProcess: Bool = true) {
         // 只对第一张图进行识别
         if let prepostProcessor = self.prepostProcessor, !self.afterImgArray.isEmpty {
             let image = self.afterImgArray[0]
             let imageView = self.imageView
             self.imageView.image = image
+            print("log.p ====== image w: \(image.size.width) h: \(image.size.height)")
+            print("log.p ====== w: \(imageView.frame.size.width) h: \(imageView.frame.size.height)")
+            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
             let imgScaleX = Double(image.size.width / CGFloat(prepostProcessor.inputWidth));
             let imgScaleY = Double(image.size.height / CGFloat(prepostProcessor.inputHeight));
             let ivScaleX : Double = (image.size.width > image.size.height ? Double(imageView.frame.size.width / image.size.width) : Double(imageView.frame.size.height / image.size.height))
@@ -674,10 +715,10 @@ extension GHDetectionTool {
                             self.doneNotice?(detectionResult)
                             self.transaction = nil
                             #if DEBUG
-//                            let image = GHOpenCVBridge.shareManager().showLastOutlet()
-//                            self.finalImage = image
-//                            self.imageView.image = image
-//                            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+                            let image = GHOpenCVBridge.shareManager().showLastOutlet()
+                            self.finalImage = image
+                            self.imageView.image = image
+                            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                             #endif
                         } else {
                             self.doneFailed()
@@ -686,7 +727,54 @@ extension GHDetectionTool {
                 }
             }
         } else {
-            self.doneFailed()
+            if let pre = self.preImg, let prepostProcessor = self.prepostProcessor, !isInProcess {
+                
+                if let compare = scaleImage(pre, toSize: CGSize(width: rectView.frame.size.width, height: rectView.frame.size.height)) {
+                    print("log.p ====== ")
+                    self.saveImageToAlbum(image: compare)
+                }
+                
+                if let oriimage = scaleImage(pre, toSize: CGSize(width: 640, height: 640)) {
+                    // 必须得有这一步 不然就会有问题
+                    let image = GHOpenCVBridge.shareManager().alignment(with:oriimage, step: 0, rotation: false) { [weak self] err in }
+                    self.saveImageToAlbum(image: oriimage)
+                    let imageView = self.imageView
+                    self.imageView.image = image
+                    
+                    let imgScaleX = Double(pre.size.width / CGFloat(prepostProcessor.inputWidth));
+                    let imgScaleY = Double(pre.size.height / CGFloat(prepostProcessor.inputHeight));
+                    
+                    let ivScaleX : Double = Double(rectView.frame.size.width / pre.size.width)
+                    let ivScaleY : Double = Double(rectView.frame.size.width / pre.size.width)
+
+                    let startX = Double((rectView.frame.size.width - CGFloat(ivScaleX) * pre.size.width)/2)
+                    let startY = Double((rectView.frame.size.height -  CGFloat(ivScaleY) * pre.size.height)/2)
+                    
+                    guard var pixelBuffer = image.normalized() else {
+                        return
+                    }
+                    
+                    DispatchQueue.global().async {
+                        var outputs: [NSNumber] = []
+                        // 处理识别异常捕获
+                        if let op = self.inferencer.module.detect(image: &pixelBuffer) {
+                            outputs = op
+                            // 预测数据
+                            let nmsPredictions = prepostProcessor.originOutputsToNMSPredictions(outputs: outputs, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
+                            // 回调主线程绘图
+                            DispatchQueue.main.async {
+                                print("log.p ======= count \(nmsPredictions.count)")
+                                prepostProcessor.showPreDetection(view: self.rectView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
+                                #if DEBUG
+                                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+                                #endif
+                            }
+                        }
+                    }
+                }
+            } else {
+                self.doneFailed()
+            }
         }
     }
 }
@@ -694,71 +782,13 @@ extension GHDetectionTool {
 // 单体识别流程 不包含 对齐及推断的业务逻辑
 extension GHDetectionTool {
     
-    // 识别灯珠
-    func runDetectionOnly(image: UIImage) {
-        // 只对第一张图进行识别
-        if let prepostProcessor = self.prepostProcessor{
-            self.imageView.image = image
-            self.imageView.frame = self.realFrame!
-            let imgScaleX = Double(image.size.width / CGFloat(prepostProcessor.inputWidth));
-            let imgScaleY = Double(image.size.height / CGFloat(prepostProcessor.inputHeight));
-            let ivScaleX : Double = (image.size.width > image.size.height ? Double(imageView.frame.size.width / image.size.width) : Double(imageView.frame.size.height / image.size.height))
-            let ivScaleY : Double = (image.size.height > image.size.width ? Double(imageView.frame.size.height / image.size.height) : Double(imageView.frame.size.width / image.size.width))
-            let startX = Double((imageView.frame.size.width - CGFloat(ivScaleX) * image.size.width)/2)
-            let startY = Double((imageView.frame.size.height -  CGFloat(ivScaleY) * image.size.height)/2)
-            guard var pixelBuffer = image.normalized() else { return }
-            DispatchQueue.global().async {
-                if let op = self.inferencer.module.detect(image: &pixelBuffer), op.count > 0 {
-                    // 预测数据
-                    let nmsPredictions = prepostProcessor.outputsToNMSPredictions(outputs: op, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
-                    // 回调主线程绘图
-                    DispatchQueue.main.async {
-                        self.showDetectionOnLayer(nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
-                    }
-                }
-            }
-        } else {
-            self.doneFailed()
-        }
-    }
-    
-    func showDetectionOnLayer(nmsPredictions: [Prediction], classes: [String]) {
-        debugPrint("Total object \(nmsPredictions.count)")
-        self.previewLayer?.sublayers.map { $0.map { if ($0.name == "preview") { $0.removeFromSuperlayer() } } }
-        for pred in nmsPredictions {
-            let index = classes[pred.classIndex]
-            switch index {
-            case "red":
-                let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.clear
-                bbox.layer.borderColor = UIColor.red.cgColor
-                bbox.layer.borderWidth = 1
-                if pred.score > 0.20 {
-                    bbox.layer.name = "preview"
-                    self.previewLayer?.addSublayer(bbox.layer)
-                }
-            case "green":
-                let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.clear
-                bbox.layer.borderColor = UIColor.green.cgColor
-                bbox.layer.borderWidth = 1
-                if pred.score > 0.20 {
-                    bbox.layer.name = "preview"
-                    self.previewLayer?.addSublayer(bbox.layer)
-                }
-            default:
-                break
-            }
-        }
-    }
-    
     func startTimer() {
         
         stopTimer() // 确保之前的定时器已停止
         // 创建一个 DispatchSourceTimer
         timer = DispatchSource.makeTimerSource(queue: queue)
         // 设置定时器触发的时间间隔
-        timer?.schedule(deadline: .now(), repeating: 3.0)
+        timer?.schedule(deadline: .now(), repeating: 10.0)
         // 设置定时器触发时执行的闭包
         timer?.setEventHandler { [weak self] in
             self?.timerFired()
