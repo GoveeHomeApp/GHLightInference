@@ -44,8 +44,10 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // 是否为识别流程中的cap
     private var capFinishHandler: (() -> Void)?
     // 是否在当前识别流程内 => 通过transaction去判断
-    // 间隔2s识别一次
+    // 间隔3s识别一次
     var queue: DispatchQueue?
+    var timer: DispatchSourceTimer?
+    
     private var realFrame: CGRect?
     
     // 识别流程唯一transaction 每次整体流程都是唯一的 结束会被置空
@@ -103,8 +105,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.setupBindings()
         // 启动AVFoundation
         self.startingIFrame()
-        
-        self.rollingCheck()
+        self.queue = DispatchQueue(label: "com.govee.goveehome.light_inferrer_timer", qos: .default, attributes: .init(), autoreleaseFrequency: .workItem, target: .global(qos: .default))
+        self.startTimer()
     }
     
     // 初始化AVCaptureSession
@@ -750,21 +752,30 @@ extension GHDetectionTool {
         }
     }
     
-    // 当transaction为nil时 逻辑跳过
-    func rollingCheck() {
-        // 创建一个每60秒触发一次的DispatchQueue
-        queue = DispatchQueue(label: "com.govee.goveehome.light_inferrer_timer", qos: .default, attributes: .init(), autoreleaseFrequency: .workItem, target: .global(qos: .default))
- 
-        queue?.async { [weak self] in
-            guard let `self` = self else { return }
-//            while self {
-//                debugPrint("log.p ===== Tool 识别定时任务执行 - \(Date())")
-//                if let tra = self.transaction {} else {
-//                    self.captureOneFrame()
-//                }
-//                sleep(3) // 休眠60秒
-//            }
+    func startTimer() {
+        
+        stopTimer() // 确保之前的定时器已停止
+        // 创建一个 DispatchSourceTimer
+        timer = DispatchSource.makeTimerSource(queue: queue)
+        // 设置定时器触发的时间间隔
+        timer?.schedule(deadline: .now(), repeating: 3.0)
+        // 设置定时器触发时执行的闭包
+        timer?.setEventHandler { [weak self] in
+            self?.timerFired()
         }
+        // 启动定时器
+        timer?.resume()
+    }
+    
+    func stopTimer() {
+        // 如果定时器存在，则取消它
+        timer?.cancel()
+        timer = nil
+    }
+    
+    private func timerFired() {
+        print("定时器触发了！")
+        self.captureOneFrame()
     }
     
 }
