@@ -158,6 +158,39 @@ public class PrePostProcessor : NSObject {
 
         return nonMaxSuppression(boxes: predictions, limit: nmsLimit, threshold: threshold)
     }
+    
+    public func originOutputsToNMSPredictions(outputs: [NSNumber], imgScaleX: Double, imgScaleY: Double, ivScaleX: Double, ivScaleY: Double, startX: Double, startY: Double) -> [Prediction] {
+        var predictions = [Prediction]()
+        for i in 0..<outputRow {
+            if Float(truncating: outputs[i*outputColumn+4]) > threshold {
+                let x = Double(truncating: outputs[i*outputColumn])
+                let y = Double(truncating: outputs[i*outputColumn+1])
+                let w = Double(truncating: outputs[i*outputColumn+2])
+                let h = Double(truncating: outputs[i*outputColumn+3])
+                
+                let left = imgScaleX * (x - w/2)
+                let top = imgScaleY * (y - h/2)
+                let right = imgScaleX * (x + w/2)
+                let bottom = imgScaleY * (y + h/2)
+                
+                var max = Double(truncating: outputs[i*outputColumn+5])
+                var cls = 0
+                for j in 0 ..< outputColumn-5 {
+                    if Double(truncating: outputs[i*outputColumn+5+j]) > max {
+                        max = Double(truncating: outputs[i*outputColumn+5+j])
+                        cls = j
+                    }
+                }
+
+                let rect = CGRect(x: startX+ivScaleX*left, y: startY+top*ivScaleY, width: ivScaleX*(right-left), height: ivScaleY*(bottom-top))
+                
+                let prediction = Prediction(classIndex: cls, score: Float(truncating: outputs[i*outputColumn+4]), rect: rect, x: Int(x), y: Int(y), w: Int(w), h: Int(h))
+                predictions.append(prediction)
+            }
+        }
+
+        return nonMaxSuppression(boxes: predictions, limit: nmsLimit, threshold: threshold)
+    }
 
     public func cleanDetection(imageView: UIImageView) {
         if let layers = imageView.layer.sublayers {
@@ -195,22 +228,6 @@ public class PrePostProcessor : NSObject {
                 if pred.score > 0.20 {
                     imageView.addSubview(bbox)
                 }
-            case "blue":
-                break
-            case "light":
-                let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.clear
-                bbox.layer.borderColor = UIColor.purple.cgColor
-                bbox.layer.borderWidth = 1
-                let bbox1 = CrossDiagonalView(frame: pred.rect)
-                bbox1.backgroundColor = UIColor.clear
-                bbox1.layoutIfNeeded()
-                // 如何准确绘制 识别后标底
-                if pred.score > 0.2 {
-                    imageView.addSubview(bbox)
-                    imageView.addSubview(bbox1)
-                }
-                break
             default:
                 break
             }

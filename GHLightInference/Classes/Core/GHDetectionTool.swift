@@ -722,6 +722,7 @@ extension GHDetectionTool {
     
     func showDetectionOnLayer(nmsPredictions: [Prediction], classes: [String]) {
         debugPrint("Total object \(nmsPredictions.count)")
+        self.previewLayer?.sublayers.map { $0.map { if ($0.name == "preview") { $0.removeFromSuperlayer() } } }
         for pred in nmsPredictions {
             let index = classes[pred.classIndex]
             switch index {
@@ -731,6 +732,7 @@ extension GHDetectionTool {
                 bbox.layer.borderColor = UIColor.red.cgColor
                 bbox.layer.borderWidth = 1
                 if pred.score > 0.20 {
+                    bbox.layer.name = "preview"
                     self.previewLayer?.addSublayer(bbox.layer)
                 }
             case "green":
@@ -739,6 +741,7 @@ extension GHDetectionTool {
                 bbox.layer.borderColor = UIColor.green.cgColor
                 bbox.layer.borderWidth = 1
                 if pred.score > 0.20 {
+                    bbox.layer.name = "preview"
                     self.previewLayer?.addSublayer(bbox.layer)
                 }
             default:
