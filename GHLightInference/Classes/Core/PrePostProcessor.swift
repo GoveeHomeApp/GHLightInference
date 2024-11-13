@@ -241,17 +241,17 @@ public class PrePostProcessor : NSObject {
             switch index {
             case "red":
                 let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.clear
-                bbox.layer.borderColor = UIColor.red.cgColor
-                bbox.layer.borderWidth = 1
+                bbox.backgroundColor = UIColor.red
+                bbox.layer.cornerRadius = CGFloat(pred.w/2)
+                bbox.layer.masksToBounds = true
                 if pred.score > 0.20 {
                     view.addSubview(bbox)
                 }
             case "green":
                 let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.clear
-                bbox.layer.borderColor = UIColor.green.cgColor
-                bbox.layer.borderWidth = 1
+                bbox.backgroundColor = UIColor.green
+                bbox.layer.cornerRadius = CGFloat(pred.w/2)
+                bbox.layer.masksToBounds = true
                 if pred.score > 0.20 {
                     view.addSubview(bbox)
                 }

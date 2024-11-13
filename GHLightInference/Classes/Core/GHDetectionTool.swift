@@ -21,8 +21,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public var frameNotice: ((DetectionEffectModel) -> Void)?
     // 完成Notice
     public var doneNotice: ((DetectionResult?) -> Void)?
-    // 识别流程外 取第一帧Notice（注意此closure不可以出现在识别流程中）
-    public var showCurrentNotice: ((DetectionEffectModel) -> Void)?
+    
+    // 识别流程外 结果Notice（注意此closure不可以出现在识别流程中）
+    public var showCurrentNotice: ((DetectionResult?) -> Void)?
     
     /* ========== 业务层回调closure ========== */
     // 开始 & 重新开始 带有transaction
@@ -34,7 +35,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     // AVCaptureDevice 相关参数调整
     public private(set) var exposureTargetBiasHandler:((Double) -> Void)?
     // 识别流程外当前调整亮度或者对比度下展示识别第一帧结果（注意此closure不可以出现在识别流程中）
-    public private(set) var showCurrentHandler:((CGRect, UIView) -> Void)?
+    public private(set) var showCurrentHandler:((_ layerRect: CGRect, _ backView: UIView) -> Void)?
+    
     // 业务层结束了 停止轮询识别
     public private(set) var stopReconHandler:(() -> Void)?
     
@@ -195,29 +197,16 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             self.queue = nil
         }
         
-        // 调整亮度 就会调用这个
+        // 识别一次 就会调用这个
         self.showCurrentHandler = { [weak self] (cz, v) in
             guard let `self` = self else { return }
             self.backView = v
             self.rectView.removeFromSuperview()
-            let colorTwoDimArray = GHOpenCVBridge.shareManager().getColorsByStep(0)
-            var greenArray: [Int] = []
-            if colorTwoDimArray.count > 0 {
-                greenArray = colorTwoDimArray[0].compactMap { $0.intValue }
-            }
-            var redArray: [Int] = []
-            if colorTwoDimArray.count > 1 {
-                redArray = colorTwoDimArray[1].compactMap { $0.intValue }
-            }
-            if greenArray.count > 0 && redArray.count > 0 {
-                let effectModel = createEffectModel(step: 0, greenArray: greenArray, redArray: redArray)
-                self.showCurrentNotice?(effectModel)
-                self.realFrame = cz
-                self.rectView.frame = cz
-                self.rectView.backgroundColor = UIColor.clear
-                self.backView?.addSubview(rectView)
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now()+2) {
+            self.realFrame = cz
+            self.rectView.frame = cz
+            self.rectView.backgroundColor = UIColor.clear
+            self.backView?.addSubview(rectView)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.captureOneFrame()
             }
         }
@@ -731,7 +720,9 @@ extension GHDetectionTool {
                 
                 if let compare = scaleImage(pre, toSize: CGSize(width: rectView.frame.size.width, height: rectView.frame.size.height)) {
                     print("log.p ====== ")
-                    self.saveImageToAlbum(image: compare)
+//                    #if DEBUG
+//                    self.saveImageToAlbum(image: compare)
+//                    #endif
                 }
                 
                 if let oriimage = scaleImage(pre, toSize: CGSize(width: 640, height: 640)) {
@@ -765,6 +756,12 @@ extension GHDetectionTool {
                             DispatchQueue.main.async {
                                 print("log.p ======= count \(nmsPredictions.count)")
                                 prepostProcessor.showPreDetection(view: self.rectView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
+                                // 回调识别结果 组装结果业务数据
+                                var res = DetectionResult()
+                                for (ind, eachPredict) in nmsPredictions.enumerated() {
+                                    res.points[ind] = [CGFloat(eachPredict.x), CGFloat(eachPredict.y)]
+                                }
+                                self.showCurrentNotice?(res)
                                 #if DEBUG
                                 self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                                 #endif
