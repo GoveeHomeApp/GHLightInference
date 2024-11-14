@@ -241,7 +241,7 @@ public class PrePostProcessor : NSObject {
             switch index {
             case "red":
                 let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.red
+                bbox.backgroundColor = UIColor.cyan
                 bbox.layer.cornerRadius = CGFloat(pred.w/2)
                 bbox.layer.masksToBounds = true
                 if pred.score > 0.20 {
@@ -249,7 +249,7 @@ public class PrePostProcessor : NSObject {
                 }
             case "green":
                 let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.green
+                bbox.backgroundColor = UIColor.cyan
                 bbox.layer.cornerRadius = CGFloat(pred.w/2)
                 bbox.layer.masksToBounds = true
                 if pred.score > 0.20 {

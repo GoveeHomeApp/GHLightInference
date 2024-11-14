@@ -200,6 +200,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         // 识别一次 就会调用这个
         self.showCurrentHandler = { [weak self] (cz, v) in
             guard let `self` = self else { return }
+            self.rectView.isHidden = false
             self.backView = v
             self.rectView.removeFromSuperview()
             self.realFrame = cz
@@ -235,6 +236,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 // 旧的流程还未结束 本次丢弃
             } else {
                 // 新的流程 可以执行
+                self.rectView.isHidden = true
                 self.transaction = sessionId
                 self.preImageArray.removeAll()
                 self.afterImgArray.removeAll()
