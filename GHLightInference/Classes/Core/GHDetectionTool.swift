@@ -728,7 +728,7 @@ extension GHDetectionTool {
                 if let oriimage = scaleImage(pre, toSize: CGSize(width: 640, height: 640)) {
                     // 必须得有这一步 不然就会有问题
                     let image = GHOpenCVBridge.shareManager().alignment(with:oriimage, step: 0, rotation: false) { [weak self] err in }
-                    self.saveImageToAlbum(image: oriimage)
+//                    self.saveImageToAlbum(image: oriimage)
                     let imageView = self.imageView
                     self.imageView.image = image
                     
@@ -764,7 +764,7 @@ extension GHDetectionTool {
                                 }
                                 self.showCurrentNotice?(res)
                                 #if DEBUG
-                                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+//                                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                                 #endif
                             }
                         }
