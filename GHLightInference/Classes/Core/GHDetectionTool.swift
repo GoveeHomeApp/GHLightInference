@@ -758,7 +758,8 @@ extension GHDetectionTool {
                                 prepostProcessor.showPreDetection(view: self.rectView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
                                 // 回调识别结果 组装结果业务数据
                                 var res = DetectionResult()
-                                for (ind, eachPredict) in nmsPredictions.enumerated() {
+                                var finalnms = nmsPredictions.filter { $0.score >= 0.2 }
+                                for (ind, eachPredict) in finalnms.enumerated() {
                                     res.points[ind] = [CGFloat(eachPredict.x), CGFloat(eachPredict.y)]
                                 }
                                 self.showCurrentNotice?(res)
