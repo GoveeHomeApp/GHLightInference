@@ -674,6 +674,7 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
         return 1;
     } catch (const std::exception &e) {
         LOGE(LOG_TAG, "getMinTrapezoid e =  %s", e.what());
+        return 0;
     } catch (...) {
         LOGE(LOG_TAG, "异常状态12");
         return 0;
