@@ -58,7 +58,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
  * @param originalMat 输入原图
  * @return
  */
-Mat alignResize(int frameStep, Mat &originalMat, vector <Mat> &outMats);
+Mat alignResize(int frameStep, Mat &originalMat, vector<Mat> &outMats);
 
 /**
  * 根据定义好的步骤进行灯带排序
@@ -75,7 +75,10 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightType,
 /**
  * 获取区域 hsv 色相
  */
-LightPoint meanColor(const Mat &src, int stepFrame, LightPoint &lPoint, Mat &meanColorMat);
+LightPoint
+meanLightColor(const Mat &src, const vector<vector<cv::Point>> &contours, int frameStep,
+               const LightPoint &lPoint, Mat &meanColorMat,
+               double forceRadius = 0.0);
 
 /**
  * 对灯带光点排序
@@ -86,7 +89,8 @@ LampBeadsProcessor sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f>
  * 获取区域颜色集合
  */
 vector<LightPoint>
-findColorType(Mat &src, int stepFrame, vector<LightPoint> &points, vector<Mat> &outMats);
+findColorType(const Mat &src, int stepFrame, const vector<LightPoint> &points,
+              vector<Mat> &outMats);
 
 /**删除不连续错点*/
 void deleteDiscontinuousPoints(LampBeadsProcessor &processor);
@@ -117,6 +121,9 @@ double calculateAverageDistance(LampBeadsProcessor &processor);
  */
 vector<LightPoint>
 decisionCenterPoints(vector<LightPoint> &input, double averageDistance);
+
+vector<LightPoint>
+decisionCenterPoints2(const vector<LightPoint> &input, double averageDistance);
 
 /**
  * 从红绿固定点和错点中推测点位
@@ -177,6 +184,21 @@ vector<LightPoint> fillMissingPoints(const vector<LightPoint> &totalPoints, doub
  * @param B 前一个点
  */
 LightPoint
-inferredCenter(int avgDistance, LightPoint &A, LightPoint &B, bool findErrorPoints);
+inferredCenter(double avgDistance, LightPoint &A, LightPoint &B, bool findErrorPoints);
+
+
+vector<LightPoint>
+mergeOverlappingPoints(const vector<LightPoint> &points, float radius = 4.0,
+                       float overlapThreshold = 0.7);
+
+bool reCheckScore(vector<LightPoint> lightPoints);
+
+Rect2i safeRect2i(const Rect2i &region, const cv::Size &imageSize);
+
+Mat
+buildRect(const LightPoint lp, const Mat &src, int forceRadius = 0);
+
+Mat
+buildRect(const Point2f position, const Mat &src, int forceRadius);
 
 #endif

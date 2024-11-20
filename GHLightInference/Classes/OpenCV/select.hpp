@@ -12,7 +12,6 @@ using namespace std;
 void
 processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoints,
                   vector<LightPoint> &errorPoints,
-                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap,
-                  int lightType);
+                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap);
 
 #endif

@@ -19,6 +19,10 @@ Pod::Spec.new do |s|
   s.source_files = 'GHLightInference/Classes/**/*'
   
   s.private_header_files = 'GHLightInference/Classes/OpenCV/**/*.{hpp,h}'
+  s.xcconfig = {
+      'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
+      'CLANG_CXX_LIBRARY'           => 'libc++'
+  }
 
   #- 推荐这种 -#
   s.resource_bundles = { 'GHLightInference' => ['GHLightInference/Assets/**/*.{xcassets,png,torchscript.ptl,json,plist,txt}'] }

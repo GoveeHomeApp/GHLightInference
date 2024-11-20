@@ -94,9 +94,9 @@ vector<LightPoint> interpolateAndExtrapolatePoints(
         existingLabels.insert(point.label);
     }
     LOGD(LOG_TAG, "interpolateAndExtrapolatePoints %d   result= %d", maxLabel, result.size());
-    if (result.empty()) {
-        return result;
-    }
+//    if (result.empty()) {
+//        return result;
+//    }
     // 对结果进行排序
     sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
         return a.label < b.label;
@@ -104,50 +104,54 @@ vector<LightPoint> interpolateAndExtrapolatePoints(
 
     // 插值
     vector<LightPoint> interpolated;
-    for (size_t i = 0; i < result.size() - 1; ++i) {
-        // 如果result为空，这里会导致无符号整数下溢
-        // 建议: 添加对result.size()的检查
-        if (!result.empty()) {
-            int start_label = result[i].label;
-            int end_label = result[i + 1].label;
-            int gap = end_label - start_label;
+    try{
+        for (size_t i = 0; i < result.size() - 1; ++i) {
+            // 如果result为空，这里会导致无符号整数下溢
+            // 建议: 添加对result.size()的检查
+            if (result.size() > 1) {
+                int start_label = result[i].label;
+                int end_label = result[i + 1].label;
+                int gap = end_label - start_label;
 
-            if (gap > 1) {
-                Point2f start_point = result[i].position;
-                Point2f end_point = result[i + 1].position;
-                Point2f step = (end_point - start_point) / static_cast<float>(gap);
+                if (gap > 1) {
+                    Point2f start_point = result[i].position;
+                    Point2f end_point = result[i + 1].position;
+                    Point2f step = (end_point - start_point) / static_cast<float>(gap);
 
-                for (int j = 1; j < gap; ++j) {
-                    int new_label = start_label + j;
-                    if (existingLabels.find(new_label) == existingLabels.end()) {
-                        Point2f new_point = start_point + step * static_cast<float>(j);
+                    for (int j = 1; j < gap; ++j) {
+                        int new_label = start_label + j;
+                        if (existingLabels.find(new_label) == existingLabels.end()) {
+                            Point2f new_point = start_point + step * static_cast<float>(j);
 
-                        LightPoint lp = LightPoint();
-                        lp.label = new_label;
-                        lp.position = new_point;
-                        interpolated.emplace_back(lp);
-                        existingLabels.insert(new_label);
+                            LightPoint lp = LightPoint();
+                            lp.label = new_label;
+                            lp.position = new_point;
+                            interpolated.emplace_back(lp);
+                            existingLabels.insert(new_label);
+                        }
                     }
                 }
             }
         }
+
+        // 将插值点添加到结果中
+        result.insert(result.end(), interpolated.begin(), interpolated.end());
+
+        LOGD(LOG_TAG, "补充内点：result = %d  input = %d  补充：%d  interpolated=%d", result.size(),
+             input.size(),
+             result.size() - input.size(), interpolated.size());
+
+        sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
+            return a.label < b.label;
+        });
+    }catch (...){
+        LOGE(LOG_TAG, "补中点问题");
     }
-
-    // 将插值点添加到结果中
-    result.insert(result.end(), interpolated.begin(), interpolated.end());
-
-    LOGD(LOG_TAG, "补充内点：result = %d  input = %d  补充：%d  interpolated=%d", result.size(),
-         input.size(),
-         result.size() - input.size(), interpolated.size());
-
-    sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
-        return a.label < b.label;
-    });
     // 外推
     try {
         if (!result.empty()) {
             // 前向外推
-            LOGD(LOG_TAG, "补充外推： start = %d", result.front().label);
+//            LOGD(LOG_TAG, "补充外推： start = %d", result.front().label);
             if (result.front().label > 0) {
                 vector<cv::Point2f> points;
                 for (int i = 0; i < std::min(fitPoints, static_cast<int>(result.size())); ++i) {
@@ -197,9 +201,9 @@ vector<LightPoint> interpolateAndExtrapolatePoints(
                         LightPoint lp = LightPoint();
                         lp.label = i;
                         lp.position = extrapolatedPoint;
-                        LOGD(LOG_TAG, "外推： label = %d  position= %f - %f", lp.label,
-                             lp.position.x,
-                             lp.position.y);
+//                        LOGD(LOG_TAG, "外推： label = %d  position= %f - %f", lp.label,
+//                             lp.position.x,
+//                             lp.position.y);
                         result.emplace_back(lp);
                         existingLabels.insert(i);
                         // 更新拟合点集
@@ -770,7 +774,7 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
                          float avgDistance) {
     try {
         int n = points.size();
-        LOGW(LOG_TAG, "-----detectOutlierPoints");
+        LOGW(LOG_TAG, "-------->根据相邻位置关系找出离群点");
         if (n < 5) return;  // Need at least 5 points for this algorithm
 
         sort(points.begin(), points.end(),
@@ -800,7 +804,7 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
                                  (distPrevPrev <= distancePrevPrev ||
                                   distNextNext <= distanceNextNext);
                 if (isOutlier) {
-                    LOGE(LOG_TAG, "1---揪出离群点：%d", points[i].label);
+                    LOGW(LOG_TAG, "1---揪出离群点：%d", points[i].label);
                     errorPoints.push_back(points[i]);
                     points.erase(points.begin() + i);
                 }
@@ -819,7 +823,7 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
 
                 bool isOutlier = (distNext > distanceNext) && (distNextNext <= distanceNextNext);
                 if (isOutlier) {
-                    LOGE(LOG_TAG, "2---揪出离群点：%d", points[i].label);
+                    LOGW(LOG_TAG, "2---揪出离群点：%d", points[i].label);
                     errorPoints.push_back(points[i]);
                     points.erase(points.begin() + i);
                 } else if (abs(points[i].label - points[i - 1].label) > 15 &&
@@ -839,7 +843,7 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
                 bool isOutlier = (distPrev > distancePrev) && (distPrevPrev <= distancePrevPrev);
 
                 if (isOutlier) {
-                    LOGE(LOG_TAG, "3---揪出离群点：%d", points[i].label);
+                    LOGW(LOG_TAG, "3---揪出离群点：%d", points[i].label);
                     errorPoints.push_back(points[i]);
                     points.erase(points.begin() + i);
                 }

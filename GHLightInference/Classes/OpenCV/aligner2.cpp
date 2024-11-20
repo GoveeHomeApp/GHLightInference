@@ -98,23 +98,24 @@ public:
         Mat aligned;
         double alignmentQuality;
         bool success = false;
+
         try {
             // 尝试使用特征点对齐方法
 //            success = alignSingleImage(firstImage, image, aligned, alignmentQuality);
             // 如果特征点对齐失败或质量不佳，尝试轮廓对齐方法
-            if (!success || alignmentQuality < config.alignmentThreshold) {
+//            if (!success || alignmentQuality < config.alignmentThreshold) {
 //                outMats.push_back(firstImage);
 //                outMats.push_back(image);
-                aligned = alignImgEcc(firstImage, image);
+            aligned = alignImgEcc(firstImage, image);
 //                outMats.push_back(aligned);
-                success = true;
-            }
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> diff = end - start;
-            LOGD(LOG_TAG, "Aligning image took %f seconds", diff.count());
+//                success = true;
+//            }
+//            auto end = std::chrono::high_resolution_clock::now();
+//            std::chrono::duration<double> diff = end - start;
+//            LOGD(LOG_TAG, "Aligning image took %f seconds", diff.count());
         } catch (const std::exception &e) {
             LOGE(LOG_TAG, "Error aligning image  e =  %s", e.what());
-            aligned = alignImgEcc(firstImage, image);
+//            aligned = alignImgEcc(firstImage, image);
         }
         return aligned;
     }
@@ -258,7 +259,6 @@ private:
         if (trans.empty()) {
             return src;
         }
-        LOGD(LOG_TAG, "===========alignImgEcc===========");
         Mat alignedImg;
         try {
             Mat warp_matrix;
@@ -281,9 +281,9 @@ private:
             int number_of_iterations2 = 70;
             Mat im1Src, im2Trans;
             // 转换为灰度图
-            cvtColor(src, im1Src, CV_BGR2GRAY);//CV_BGR2GRAY
+            cvtColor(src, im1Src, COLOR_BGR2GRAY);//CV_BGR2GRAY
 
-            cvtColor(trans, im2Trans, CV_BGR2GRAY);
+            cvtColor(trans, im2Trans, COLOR_BGR2GRAY);
 
             TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS, number_of_iterations2,
                                   termination_eps2);
@@ -301,7 +301,7 @@ private:
         } 
 //        catch (cv::Exception &e) {
 //            LOGE(LOG_TAG, "alignImgEcc , e = %s", e.what());
-//            return alignedImg;
+//            return trans;
 //        } 
         catch (...) {
             LOGE(LOG_TAG, "alignImgEcc error");
@@ -314,7 +314,7 @@ private:
         Mat refProcessed = preprocess(reference);
         Mat targetProcessed = preprocess(target);
 
-        std::vector <std::vector<Point>> contoursRef, contoursTarget;
+        std::vector<std::vector<Point>> contoursRef, contoursTarget;
         findContours(refProcessed, contoursRef, config.contourMethod,
                      config.contourApproximation);
         findContours(targetProcessed, contoursTarget, config.contourMethod,
@@ -327,13 +327,13 @@ private:
 
         // 找到最大的轮廓（假设是圣诞树）
         auto maxContourRef = *std::max_element(contoursRef.begin(), contoursRef.end(),
-                                               [](const std::vector <Point> &c1,
-                                                  const std::vector <Point> &c2) {
+                                               [](const std::vector<Point> &c1,
+                                                  const std::vector<Point> &c2) {
                                                    return contourArea(c1) < contourArea(c2);
                                                });
         auto maxContourTarget = *std::max_element(contoursTarget.begin(), contoursTarget.end(),
-                                                  [](const std::vector <Point> &c1,
-                                                     const std::vector <Point> &c2) {
+                                                  [](const std::vector<Point> &c1,
+                                                     const std::vector<Point> &c2) {
                                                       return contourArea(c1) <
                                                              contourArea(c2);
                                                   });
