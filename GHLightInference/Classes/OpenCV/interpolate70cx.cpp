@@ -228,27 +228,6 @@ vector<LightPoint> interpolateAndExtrapolatePoints(
 }
 
 
-//// 使用线性插值
-//vector<LightPoint> interpolateLinear(const vector<LightPoint>& points, int maxLabel) {
-//    vector<float> labels, values;
-//    for (const auto& lp : points) {
-//        labels.push_back(static_cast<float>(lp.label));
-//        values.push_back(lp.position.y);
-//    }
-//
-//   Mat labelsMat(labels), valuesMat(values);
-//
-//    vector<LightPoint> interpolatedPoints;
-//    for (int label = 0; label <= maxLabel; ++label) {
-//        float y;
-//       Mat(static_cast<float>(label)).reshape(1, 1).convertTo(y, CV_32F,Mat::linearInterpolate(labelsMat, valuesMat, cv::Mat(static_cast<float>(label))));
-//        float x = label * (600.0f / maxLabel);  // 线性映射标签到 x 坐标
-//        interpolatedPoints.push_back({{x, y}, label});
-//    }
-//
-//    return interpolatedPoints;
-//}
-
 void
 drawPolynomialPoints(cv::Mat &image, const vector<LightPoint> &points, const cv::Scalar &color,
                      bool drawLabels) {
@@ -261,32 +240,7 @@ drawPolynomialPoints(cv::Mat &image, const vector<LightPoint> &points, const cv:
     }
 }
 
-//int main() {
-//    cv::Mat image = cv::Mat::zeros(400, 600, CV_8UC3);  // 创建一个黑色图像
-//
-////    vector<LightPoint> originalPoints = generateSamplePoints();
-//    int maxLabel = 0;
-//    for (const auto &lp: originalPoints) {
-//        maxLabel = max(maxLabel, lp.label);
-//    }
-//
-//    // 绘制原始点
-//    drawPoints(image, originalPoints, cv::Scalar(0, 0, 255), true);  // 红色，显示标签
-//
-//    // 使用多项式拟合补全点
-//    vector<LightPoint> polyPoints = interpolatePolynomial(originalPoints, maxLabel);
-//    drawPoints(image, polyPoints, cv::Scalar(0, 255, 0));  // 绿色
-//
-//    // 使用样条插值补全点
-//    vector<LightPoint> splinePoints = interpolateSpline(originalPoints, maxLabel);
-//    drawPoints(image, splinePoints, cv::Scalar(255, 0, 0));  // 蓝色
-//
-//    cv::imshow("Interpolation Result", image);
-//    cv::imwrite("interpolation_result.png", image);
-//    cv::waitKey(0);
-//
-//    return 0;
-//}
+
 
 // 绘制点和曲线
 void drawPointsAndCurve(cv::Mat &image, const vector<LightPoint> &originalPoints,
@@ -771,7 +725,7 @@ void removeOutliersDBSCAN(vector<LightPoint> &points,
  * 根据相邻位置关系找出离群点
  */
 void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPoints,
-                         float avgDistance) {
+                         float avgDistance,int diff) {
     try {
         int n = points.size();
         LOGW(LOG_TAG, "-------->根据相邻位置关系找出离群点");
@@ -782,8 +736,8 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
 
         for (int i = n - 3; i >= 2; --i) {
             //当前点的2侧都有点
-            if (abs(points[i].label - points[i - 1].label) < 4 &&
-                abs(points[i].label - points[i + 1].label) < 4) {
+            if (abs(points[i].label - points[i - 1].label) < diff &&
+                abs(points[i].label - points[i + 1].label) < diff) {
 
                 float distPrev = norm(points[i].position - points[i - 1].position);
                 float distNext = norm(points[i].position - points[i + 1].position);
@@ -791,8 +745,8 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
                 float distNextNext = norm(points[i + 1].position - points[i + 2].position);
                 float distSkip = norm(points[i - 1].position - points[i + 1].position);
 
-                float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 2.2;
-                float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 2.2;
+                float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 2.0;
+                float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 2.0;
                 float distanceSkip =
                         abs(points[i - 1].label - points[i + 1].label) * avgDistance * 1.5;
                 float distancePrevPrev =
@@ -808,11 +762,11 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
                     errorPoints.push_back(points[i]);
                     points.erase(points.begin() + i);
                 }
-            } else if (abs(points[i].label - points[i - 1].label) > 4 &&
-                       abs(points[i].label - points[i + 1].label) < 4) {
+            } else if (abs(points[i].label - points[i - 1].label) > diff &&
+                       abs(points[i].label - points[i + 1].label) < diff) {
 
                 //与下一个点的阀值距离
-                float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 2.2;
+                float distanceNext = abs(points[i].label - points[i + 1].label) * avgDistance * 2.0;
                 //与下一个点的距离
                 float distNext = norm(points[i].position - points[i + 1].position);
                 //后续2个点的距离
@@ -832,10 +786,10 @@ void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPo
                     errorPoints.push_back(points[i]);
                     points.erase(points.begin() + i);
                 }
-            } else if (abs(points[i].label - points[i - 1].label) < 4 &&
-                       abs(points[i].label - points[i + 1].label) > 4) {
+            } else if (abs(points[i].label - points[i - 1].label) < diff &&
+                       abs(points[i].label - points[i + 1].label) > diff) {
                 float distPrev = norm(points[i].position - points[i - 1].position);
-                float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 2.2;
+                float distancePrev = abs(points[i].label - points[i - 1].label) * avgDistance * 2.0;
 
                 float distPrevPrev = norm(points[i - 1].position - points[i - 2].position);
                 float distancePrevPrev =

@@ -35,7 +35,7 @@ private:
             center *= (1.0f / convex_hull.size());
 
             vector<Point> expanded_hull;
-            float scale = 1.05f;
+            float scale = 1.15f;
             for (const Point &p: convex_hull) {
                 Point2f vec = Point2f(p.x, p.y) - center;
                 Point2f expanded = center + vec * scale;
@@ -117,7 +117,7 @@ public:
                     *max_element(brightnesses.begin(), brightnesses.end()) * 0.85;
             LOGD(LOG_TAG, "更新参数  brightness_threshold=%f", features.brightness_threshold);
 //            features.brightness_threshold = 200;
-            features.max_area = min(features.max_area, 200);
+            features.brightness_threshold = max(features.brightness_threshold, 200.0);
         }
         if (!areas.empty()) {
             features.min_area = max(1, cvRound(*min_element(areas.begin(), areas.end()) * 0.8));
@@ -129,7 +129,7 @@ public:
             features.circularity_threshold =
                     *min_element(circularities.begin(), circularities.end()) * 0.9;
             LOGD(LOG_TAG, "更新参数 circularity_threshold=%f", features.circularity_threshold);
-            features.circularity_threshold = 0.3;
+            features.circularity_threshold = 0.35;
         }
     }
 
@@ -192,7 +192,7 @@ public:
             for (size_t i = 0; i < known_positions.size(); i++) {
                 float distance = norm(center - known_positions[i]);
 
-                if (distance < 5) {
+                if (distance < 6) {
                     // 距离小于5，视为同一个点，不是新点
                     is_new = false;
                     break;

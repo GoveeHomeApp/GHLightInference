@@ -78,7 +78,7 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightType,
 LightPoint
 meanLightColor(const Mat &src, const vector<vector<cv::Point>> &contours, int frameStep,
                const LightPoint &lPoint, Mat &meanColorMat,
-               double forceRadius = 0.0);
+               double forceRadius = 8.0);
 
 /**
  * 对灯带光点排序

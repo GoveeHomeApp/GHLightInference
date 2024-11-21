@@ -104,6 +104,13 @@ public:
         height = heightset;
     }
 
+    LightPoint(cv::Point2f point, double withSet, double heightset, CUS_COLOR_TYPE type) {
+        position = point;
+        with = withSet;
+        height = heightset;
+        type = type;
+    }
+
     LightPoint(int labelSet) {
         label = labelSet;
     }

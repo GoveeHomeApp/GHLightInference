@@ -15,7 +15,6 @@
 #include <iomanip>
 #include <sstream>
 #include <csetjmp>
-jmp_buf jump_buffer;
 
 /**
  * 得分计算序列
@@ -111,12 +110,6 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
         if (frameStep == STEP_VALID_FRAME_START) {
             Mat src = frameStepMap[frameStep].clone();
             if (!pPointXys.empty())pPointXys.clear();
-            if (resultObjects.empty()) {//todo:linpeng
-                findByContours(src, pPointXys, resultObjects, outMats);
-                vector<LightPoint> lpMergeList = mergeOverlappingPoints(resultObjects);
-                LOGW(LOG_TAG, " mergeOverlappingPoints  resultObjects=%d   lpMergeList=%d ",
-                     resultObjects.size(), lpMergeList.size());
-            }
             for (const auto &curPoint: resultObjects) {
                 pPointXys.push_back(curPoint.position);
             }
@@ -208,6 +201,35 @@ void drawPointsMatOut(const Mat &src, const vector<LightPoint> lightPoints, vect
     }
 }
 
+void remove4AnomalyDetector(LampBeadsProcessor &processor) {
+    if (getIcNum() >= 500 && processor.totalPoints.size() > 2) {
+        //对补全的点进行排序
+        sort(processor.totalPoints.begin(), processor.totalPoints.end(), compareIndex);
+        float distanceThreshold = 6.0f;  // 距离阈值系数
+        int labelDiffThreshold = 10;   // 允许的最大标签差
+        int densityNeighbors = 10;  // 用于计算密度的邻居数
+        AnomalyDetector detector(processor.totalPoints, processor.averageDistance,
+                                 distanceThreshold,
+                                 labelDiffThreshold, getIcNum(), densityNeighbors);
+        vector<int> anomalies = detector.detectAnomalies();
+        LOGE(TAG_DELETE, "remove4AnomalyDetector errorPoints=%d", anomalies.size());
+        for (int i = anomalies.size() - 1; i >= 0; i--) {
+            int pointIndex = anomalies[i];
+            if (pointIndex >= processor.totalPoints.size() || pointIndex < 0) {
+                LOGE(TAG_DELETE, "remove4AnomalyDetector 擦除脏数据失败");
+                continue;
+            }
+            LOGD(TAG_DELETE,
+                 "remove4AnomalyDetector erase index=%d, label=%d  errorPoint = %f x %f",
+                 anomalies[i],
+                 processor.totalPoints[anomalies[i]].label,
+                 processor.totalPoints[anomalies[i]].position.x,
+                 processor.totalPoints[anomalies[i]].position.y);
+            processor.totalPoints.erase(processor.totalPoints.begin() + anomalies[i]);
+        }
+    }
+}
+
 /**
  * 对灯带光点排序
  */
@@ -237,28 +259,32 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 
     //计算点位平均距离
     double averageDistance = calculateAverageDistance(processor);
-
     drawPointsMatOut(src, processor.normalPoints, outMats);
+
+    /*推测中间夹点*/
+    detectOutlierPoints(processor.totalPoints, errorSerialVector, averageDistance, 8);
 
     /*推测中间夹点*/
     processor.totalPoints = decisionCenterPoints2(processor.normalPoints, averageDistance);
 
-    /*处理分值相同的点*/
-    processSamePoints(src, outMats, processor.totalPoints, errorSerialVector, averageDistance,
-                      processor.sameSerialNumMap);
+    remove4AnomalyDetector(processor);
 
     drawPointsMatOut(src, processor.totalPoints, outMats);
 
     if (processor.totalPoints.size() < 4)return processor;
 
+    LOGD(LOG_TAG, "processor.totalPoints = %d", processor.totalPoints.size());
+
     decisionRightLeftPoints(processor.totalPoints, false);
+
+    /*处理分值相同的点*/
+    processSamePoints(src, outMats, processor.totalPoints, errorSerialVector, averageDistance,
+                      processor.sameSerialNumMap);
 
     processor.totalPoints = fillMissingPoints(processor.totalPoints, averageDistance);
 
-    if (lightType == TYPE_H70CX_3D || lightType == TYPE_H70CX_2D) {
-        //todo:linpeng
+    if (lightType == TYPE_H70CX_3D) {
         detectOutlierPoints(processor.totalPoints, errorSerialVector, averageDistance);
-//        removeOutliersDBSCAN(processor.totalPoints, 0.1, 2, 0.8);
     }
 
     if (processor.totalPoints.size() > 2) {
@@ -340,7 +366,7 @@ bool reCheckScore(LampBeadsProcessor &processor, std::vector<LightPoint> &lightP
         for (int step = 0; step < getMaxStepCnt(); ++step) {
             cv::Mat e;
             vector<vector<Point>> contours;
-            LightPoint lightPoint = meanLightColor(frameStepMap[step], contours, step, item, e, 3);
+            LightPoint lightPoint = meanLightColor(frameStepMap[step], contours, step, item, e, 4);
             score += scoreVV[step][lightPoint.type];
         }
         ++i;
@@ -417,7 +443,7 @@ int statisticalScorePoints(Mat &src, vector<Mat> &outMats, LampBeadsProcessor &p
          eraseVector.size(),
          scoreMin, scoreMax, sameColorScore[0], sameColorScore[1]);
 
-    for (int n = 1; n <= 10; ++n) { // 假设你想处理到getScoreMax() - 7 todo:
+    for (int n = 1; n <= 10; ++n) { // 假设你想处理到getScoreMax() - 7
         int currentScore = scoreMax - n;
     }
 
@@ -553,7 +579,7 @@ double calculateAverageDistance(LampBeadsProcessor &processor) {
         }
     }
     // 排序
-    std::sort(distanceList.begin(), distanceList.end());
+    sort(distanceList.begin(), distanceList.end());
 
     // 计算要过滤的数量
     size_t numToRemoveMin = distanceList.size() / 5;
@@ -739,14 +765,14 @@ decisionCenterPoints2(const vector<LightPoint> &input, double averageDistance) {
     int totalAdd_4 = 0;
     vector<LightPoint> inferredResult;
     for (int i = 1; i < points.size(); ++i) {
-        LightPoint startLPoint = (i == 0) ? points[i] : points[i - 1];
+        LightPoint startLPoint = points[i - 1];
         LightPoint endLPoint = points[i];
         Point2f startPoint = startLPoint.position;
         Point2f endPoint = endLPoint.position;
         int missingCount = endLPoint.label - startLPoint.label;
         if (missingCount == 2) {
             totalDiff_1++;
-            int inferredLightIndex = endLPoint.label + 1;
+            int inferredLightIndex = startLPoint.label + 1;
             if (inferredLightIndex > getIcNum()) continue;
             // 处理中间缺失一个点的情况
             int sequenceType = getNonSequenceType(inferredLightIndex, lightType);
@@ -756,10 +782,6 @@ decisionCenterPoints2(const vector<LightPoint> &input, double averageDistance) {
                 continue;
             }
             vector<LightPoint> &inferredList = sequenceTypeMap[sequenceType];
-            LOGV(TAG_INFERRED,
-                 "推断中间点 sequenceType=%d  inferredLightIndex=%d  inferredList=%d",
-                 sequenceType,
-                 inferredLightIndex, inferredList.size());
 
             for (const auto &item: inferredList) {
                 if (item.position.x == 0) {
@@ -770,9 +792,6 @@ decisionCenterPoints2(const vector<LightPoint> &input, double averageDistance) {
             LightPoint findLp = findAndRemoveClosestInEllipse(endLPoint, startLPoint, inferredList,
                                                               averageDistance * 1.5);
 
-            LOGV(TAG_INFERRED, "推断中间点---> inferredList=%d",
-                 sequenceTypeMap[sequenceType].size());
-
             findLp.label = inferredLightIndex;
             if (findLp.errorStatus == EMPTY_POINT) {
                 Point2f ellipse_center = (endPoint + startPoint) * 0.5f;
@@ -780,53 +799,6 @@ decisionCenterPoints2(const vector<LightPoint> &input, double averageDistance) {
                 findLp.errorStatus = NORMAL;
             }
             inferredResult.push_back(findLp);
-        } else if (missingCount == 40000) {//缺1个有效点
-            totalDiff_4++;
-            int inferredLightIndex_1 = (endLPoint.label + startLPoint.label) / 2;
-            int inferredLightIndex_2 = startLPoint.label + 1;
-            int inferredLightIndex_3 = endLPoint.label - 1;
-            LOGD(TAG_INFERRED, "inferredLightIndex = %d , %d , %d ,", inferredLightIndex_2,
-                 inferredLightIndex_1, inferredLightIndex_3);
-
-            // 处理中间缺失一个点的情况
-//            int sequenceType_1 = getNonSequenceType(inferredLightIndex_1, lightType);
-            int sequenceType_2 = getNonSequenceType(inferredLightIndex_2, lightType);
-            int sequenceType_3 = getNonSequenceType(inferredLightIndex_3, lightType);
-            if (sequenceType_2 == -1 || sequenceType_3 == -1) {
-                LOGE(TAG_INFERRED, "========= 3x 非推断序号 =========");
-                continue;
-            }
-//            vector<LightPoint> &inferredList_1 = sequenceTypeMap[sequenceType_1];
-            vector<LightPoint> &inferredList_2 = sequenceTypeMap[sequenceType_2];
-            vector<LightPoint> &inferredList_3 = sequenceTypeMap[sequenceType_3];
-
-            //const LightPoint& A, const LightPoint& C, std::vector<LightPoint>& inferredList, double averageDistance
-            LightPoint find_1 = LightPoint();
-            find_1.label = inferredLightIndex_1;
-            Point2f ellipse_center = (endPoint + startPoint) * 0.5f;
-            find_1.position = ellipse_center;
-            find_1.errorStatus = EMPTY_POINT;
-
-            LightPoint findLp_2 = findAndRemoveClosestInEllipse(startLPoint, find_1,
-                                                                inferredList_2,
-                                                                averageDistance * 1.5);
-            LightPoint findLp_3 = findAndRemoveClosestInEllipse(find_1, endLPoint,
-                                                                inferredList_3,
-                                                                averageDistance * 1.5);
-            if (findLp_2.errorStatus != EMPTY_POINT && findLp_3.errorStatus != EMPTY_POINT) {
-                find_1.errorStatus = NORMAL;
-                inferredResult.push_back(find_1);
-                if (find_1.position.x == 0)
-                    LOGE(TAG_INFERRED, "findLp_2 %f -%f", find_1.position.x, find_1.position.y);
-                inferredResult.push_back(findLp_2);
-                inferredResult.push_back(findLp_3);
-                if (findLp_2.position.x == 0)
-                    LOGE(TAG_INFERRED, "findLp_2 %f -%f", findLp_2.position.x, findLp_2.position.y);
-                if (findLp_3.position.x == 0)
-                    LOGE(TAG_INFERRED, "findLp_3 %f -%f", findLp_3.position.x, findLp_3.position.y);
-            }
-            LOGD(TAG_INFERRED, "3x errorStatus = %d , %d , %d ,", find_1.errorStatus,
-                 findLp_2.errorStatus, findLp_3.errorStatus);
         }
     }
     inferredResult.insert(inferredResult.end(), input.begin(), input.end());
@@ -1114,7 +1086,7 @@ vector<LightPoint> fillMissingPoints(const vector<LightPoint> &totalPoints, doub
             }
         }
 
-// 重新按label排序
+        // 重新按label排序
         std::sort(result.begin(), result.end(), [](const LightPoint &a, const LightPoint &b) {
             return a.label < b.label;
         });
@@ -1361,8 +1333,8 @@ findColorType(const Mat &src, int stepFrame, const vector<LightPoint> &points,
 //        cvtColor(meanColorMat, gray, COLOR_BGR2GRAY);
 //
 //        // 预处理
-//        Mat blurred;
-//        GaussianBlur(gray, blurred, Size(3, 3), 1.5);
+        Mat blurred;
+        GaussianBlur(src, blurred, Size(3, 3), 1.5);
 //
 //        Mat binary;
 //        threshold(blurred, binary, 200, 255, THRESH_BINARY);
@@ -1371,15 +1343,15 @@ findColorType(const Mat &src, int stepFrame, const vector<LightPoint> &points,
 //        if (binary.type() != CV_8UC1) {
 //            binary.convertTo(binary, CV_8UC1);
 //        }
-//
 //        findContours(binary.clone(), contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
         // 转换到HSV色彩空间
         for (auto lPoint: points) {
             Scalar scalar;
-            LightPoint lightPoint = meanLightColor(src, contours, stepFrame, lPoint, meanColorMat);
+            LightPoint lightPoint = meanLightColor(blurred, contours, stepFrame, lPoint,
+                                                   meanColorMat);
             result.push_back(lightPoint);
         }
-        //    meanColorMat.release(); //todo:linpeng
+//        meanColorMat.release();
         outMats.push_back(meanColorMat);
     } catch (const std::exception &e) {
         LOGE(LOG_TAG, "findColorType 时发生异常: %s", e.what());
@@ -1404,7 +1376,7 @@ meanLightColor(const Mat &image, const vector<vector<Point>> &contours, int step
         Mat region;
         Point2f point = lPoint.position;
         CUS_COLOR_TYPE colorType = E_W;
-        region = buildRect(lPoint, image, 7);
+        region = buildRect(lPoint, image, forceRadius);
         if (region.empty()) {
             LOGE(LOG_TAG, "region is empty!");
             LightPoint newLp = LightPoint(lPoint.position, lPoint.with, lPoint.height);
@@ -1417,23 +1389,37 @@ meanLightColor(const Mat &image, const vector<vector<Point>> &contours, int step
         double green = avgPixelIntensity[1];
         double red = avgPixelIntensity[2];
 
-        if (red * 1.1 > green && red > blue) {//red > blue &&  * 1.1
+        if (red * 1.15 > green && red > blue * 1.1) {//red > blue &&  * 1.1
             colorType = E_RED;
-        } else if (green > red && green > blue) {// && green > blue
+        } else if (green > red && green > blue * 1.1) {// && green > blue
             colorType = E_GREEN;
         } else {
             LOGV(LOG_TAG, "meanColor= 无法识别");
+            region = buildRect(lPoint, image, forceRadius + 2);
+            if (!region.empty()) {
+                avgPixelIntensity = mean(region);
+                blue = avgPixelIntensity[0];
+                green = avgPixelIntensity[1];
+                red = avgPixelIntensity[2];
+                if (red * 1.15 > green && red > blue * 1.1) {//red > blue &&  * 1.1
+                    colorType = E_RED;
+                } else if (green > red && green > blue * 1.1) {// && green > blue
+                    colorType = E_GREEN;
+                } else {
+                    colorType = E_W;
+                }
+            }
         }
         if (!meanColorMat.empty()) {
             putText(meanColorMat, to_string(stepFrame), Point(50, 50), FONT_HERSHEY_SIMPLEX,
                     0.7, Scalar(255, 0, 50), 2);
             if (!meanColorMat.empty()) {//绘制测试图片
                 if (colorType == E_RED) {//red > blue &&
-                    circle(meanColorMat, point, 7, Scalar(0, 0, 255), 2);
+                    circle(meanColorMat, point, 8, Scalar(0, 0, 255), 2);
                 } else if (colorType == E_GREEN) {// && green > blue
-                    circle(meanColorMat, point, 7, Scalar(0, 255, 0), 2);
+                    circle(meanColorMat, point, 8, Scalar(0, 255, 0), 2);
                 } else {
-                    circle(meanColorMat, point, 7, Scalar(255, 0, 0), 2);
+                    circle(meanColorMat, point, 8, Scalar(255, 0, 0), 2);
                 }
             }
         }
@@ -1580,7 +1566,7 @@ LightPoint findLampInVector(Point2f &center, double minDistance, bool checkDista
     }
     try {
         int selectIndex = -1;
-        double distanceTemp = minDistance * 0.85;
+        double distanceTemp = minDistance * 1;
 
         // 遍历所有点，找到距离最近的点
         for (size_t i = 0; i < points.size(); ++i) {
@@ -1596,7 +1582,7 @@ LightPoint findLampInVector(Point2f &center, double minDistance, bool checkDista
 
         // 如果没有找到符合条件的点
         if (selectIndex == -1) {
-            LOGV(LOG_TAG, "未找到满足条件的点");
+//            LOGV(LOG_TAG, "未找到满足条件的点");
             return {EMPTY_POINT};
         }
 
