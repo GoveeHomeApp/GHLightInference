@@ -369,7 +369,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 if let preLayer = self.previewLayer, let image = self.getImageFromSampleBuffer(sampleBuffer: sampleBuffer) {
                     if let fra = self.realFrame {
                         self.saveImageView.image = image
-                        self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
+//                        self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                         print("log.f ====== width \(fra.width) height \(fra.height)")
                         if let rotat = image.rotated(by: .pi/2) {
                             self.saveImageToAlbum(image: rotat)
@@ -554,7 +554,7 @@ extension GHDetectionTool {
             self.imageView.image = image
             print("log.p ====== image w: \(image.size.width) h: \(image.size.height)")
             print("log.p ====== w: \(imageView.frame.size.width) h: \(imageView.frame.size.height)")
-            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
+//            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
             let imgScaleX = Double(image.size.width / CGFloat(prepostProcessor.inputWidth));
             let imgScaleY = Double(image.size.height / CGFloat(prepostProcessor.inputHeight));
             let ivScaleX : Double = (image.size.width > image.size.height ? Double(imageView.frame.size.width / image.size.width) : Double(imageView.frame.size.height / image.size.height))
