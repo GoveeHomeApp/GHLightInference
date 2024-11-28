@@ -75,20 +75,42 @@ public:
         vector<double> circularities;
 
         for (const Point2f &pos: known_positions) {
-            // 确保ROI在图像范围内
-            Rect roi(
-                    max(0, cvRound(pos.x - 5)),
-                    max(0, cvRound(pos.y - 5)),
-                    min(image.cols - cvRound(pos.x - 10), 10),
-                    min(image.rows - cvRound(pos.y - 10), 10)
-            );
-            if (roi.width <= 0 || roi.height <= 0) continue;
+            // 计算ROI的范围，确保在图像边界内
+            int x = cvRound(pos.x - 8);
+            int y = cvRound(pos.y - 8);
+            int width = 16;
+            int height = 16;
 
+            // 调整ROI的位置和大小，确保不超出图像边界
+            if (x < 0) {
+                width += x;  // 减少宽度
+                x = 0;      // 将x设置为0
+            }
+            if (y < 0) {
+                height += y; // 减少高度
+                y = 0;      // 将y设置为0
+            }
+            if (x + width > image.cols) {
+                width = image.cols - x;  // 调整宽度以适应图像边界
+            }
+            if (y + height > image.rows) {
+                height = image.rows - y;  // 调整高度以适应图像边界
+            }
+
+            // 检查ROI是否有效
+            if (width <= 0 || height <= 0) {
+                continue;  // 跳过无效的ROI
+            }
+
+            // 创建有效的ROI
+            Rect roi(x, y, width, height);
             Mat led_region = image(roi);
 
+            // 计算平均亮度
             Scalar mean_val = mean(led_region);
             brightnesses.push_back(mean_val[0]);
 
+            // 二值化处理
             Mat binary;
             threshold(led_region, binary, features.brightness_threshold, 255, THRESH_BINARY);
 
@@ -97,6 +119,7 @@ public:
                 binary.convertTo(binary, CV_8UC1);
             }
 
+            // 查找轮廓
             vector<vector<Point>> contours;
             findContours(binary.clone(), contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
@@ -111,25 +134,23 @@ public:
             }
         }
 
-        // 更新参数
+        // 更新特征参数
         if (!brightnesses.empty()) {
+            double bri = *max_element(brightnesses.begin(), brightnesses.end()) * 0.95;
             features.brightness_threshold =
-                    *max_element(brightnesses.begin(), brightnesses.end()) * 0.85;
-            LOGD(LOG_TAG, "更新参数  brightness_threshold=%f", features.brightness_threshold);
-//            features.brightness_threshold = 200;
-            features.brightness_threshold = max(features.brightness_threshold, 200.0);
+                    max(bri, 200.0);
+            LOGD(LOG_TAG, "更新参数  brightness_threshold=%f  bri=$bri",
+                 features.brightness_threshold, bri);
         }
         if (!areas.empty()) {
-            features.min_area = max(1, cvRound(*min_element(areas.begin(), areas.end()) * 0.8));
+            features.min_area = max(2, cvRound(*min_element(areas.begin(), areas.end()) * 0.8));
             features.max_area = cvRound(*max_element(areas.begin(), areas.end()) * 1.2);
             LOGD(LOG_TAG, "更新参数  min_area=%d  max_area=%d", features.min_area,
                  features.max_area);
         }
         if (!circularities.empty()) {
-            features.circularity_threshold =
-                    *min_element(circularities.begin(), circularities.end()) * 0.9;
+            features.circularity_threshold = 0.35;  // 使用固定值而不是动态计算
             LOGD(LOG_TAG, "更新参数 circularity_threshold=%f", features.circularity_threshold);
-            features.circularity_threshold = 0.35;
         }
     }
 
@@ -154,7 +175,7 @@ public:
 
         // 预处理
         Mat blurred;
-        GaussianBlur(masked_image, blurred, Size(3, 3), 1.5);
+        GaussianBlur(masked_image, blurred, Size(5, 5), 1.5);
 
         Mat binary;
         threshold(blurred, binary, features.brightness_threshold, 255, THRESH_BINARY);

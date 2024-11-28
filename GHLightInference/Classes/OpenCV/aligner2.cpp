@@ -30,6 +30,7 @@
 
 #if USE_OPENCL
 #include <opencv2/core/ocl.hpp>
+#include "common.hpp"
 #endif
 
 #if defined(__ANDROID__) || TARGET_OS_IPHONE

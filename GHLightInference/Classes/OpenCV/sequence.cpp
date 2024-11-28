@@ -5,6 +5,7 @@
 const int red = -65536;
 const int green = -16711936;
 const int blue = -16776961;
+const int empty = -16711423;
 const vector<int> numbers = {red, green, blue};
 vector<PointIndex> listResult;
 map<int, int> icRatioMap;
@@ -240,6 +241,7 @@ vector<vector<int>> getColors(int frameStep) {
                              index, colorIndex, frameStep, offset, indexList.size());
                         continue;
                     }
+//                    colorMap.push_back({index, blue});
                     colorMap.push_back({index, numbers[colorIndex]});
                 }
                 cntEvenIndex++;

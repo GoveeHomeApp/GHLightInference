@@ -135,7 +135,8 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
         }
         putText(outMat, "processSamePoints", Point(50, 50), FONT_HERSHEY_SIMPLEX, 0.7,
                 Scalar(255, 0, 50), 2);
-        outMats.push_back(outMat);
+        outMat.release();//todo: linpeng
+//        outMats.push_back(outMat);
     } catch (...) {
         LOGE(LOG_TAG, "processSamePoints error");
     }

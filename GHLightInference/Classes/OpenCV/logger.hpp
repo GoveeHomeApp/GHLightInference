@@ -26,7 +26,7 @@ public:
     };
 
     static void log(LogLevel level, const char *tag, const char *format, ...) {
-#if DEBUG
+        if (true)return;
         va_list args;
         va_start(args, format);
 
@@ -70,10 +70,10 @@ public:
 #else
         std::cout << "[" << getLevelString(level) << "] " << tag << ": " << message << std::endl;
 #endif
-#endif
     }
 
 private:
+
     static const char *getLevelString(LogLevel level) {
         switch (level) {
             case LogLevel::L_VERBOSE:
@@ -91,6 +91,7 @@ private:
         }
     }
 };
+
 
 #define LOGV(TAG, ...) Logger::log(Logger::LogLevel::L_VERBOSE, TAG, __VA_ARGS__)
 #define LOGD(TAG, ...) Logger::log(Logger::LogLevel::L_DEBUG, TAG, __VA_ARGS__)
