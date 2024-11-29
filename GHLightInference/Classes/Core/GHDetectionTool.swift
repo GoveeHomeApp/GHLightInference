@@ -372,7 +372,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
 //                        self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.saveImageView)
                         print("log.f ====== width \(fra.width) height \(fra.height)")
                         if let rotat = image.rotated(by: .pi/2) {
-                            self.saveImageToAlbum(image: rotat)
+//                            self.saveImageToAlbum(image: rotat)
                             print("log.f ======  rotat image width \(rotat.size.width) rotat image height \(rotat.size.height)")
                             self.preImg = rotat
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
