@@ -965,6 +965,11 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                 //倒数二个点
             } else {
                 int i = distance(totalPoints.begin(), it);
+                // 判断点位是否越界
+                int dis = totalPoints.end() - it - 2;
+                if (dis >= totalPoints.size()) {
+                    continue;
+                }
                 LightPoint curLPoint = totalPoints[i];
                 LightPoint nextLPoint = totalPoints[i + 1];
                 LightPoint lastLPoint = totalPoints[i - 1];
@@ -1030,7 +1035,6 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                 }
                 it = newPosition;
                 // 注意边界判断
-                int dis = totalPoints.end() - it - 1;
                 if (dis >= totalPoints.size()) {
                     break;
                 }
