@@ -55,6 +55,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     private var rectView = UIView()
     private var preImg: UIImage?
     
+    private var isHori: Bool = false
+    private var minus: CGFloat = 0.0
+    
     // 识别流程唯一transaction 每次整体流程都是唯一的 结束会被置空
     private var transaction: String? {
         didSet {
@@ -200,11 +203,24 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         // 识别一次 就会调用这个
         self.showCurrentHandler = { [weak self] (cz, v) in
             guard let `self` = self else { return }
+            var oX = 0.0
+            if let oriR = self.realFrame {
+                oX = oriR.origin.y
+                print("log.p ====== oX \(oX)")
+            }
             self.rectView.isHidden = false
             self.backView = v
             self.rectView.removeFromSuperview()
             self.realFrame = cz
             self.rectView.frame = cz
+            self.isHori = rectView.frame.size.width > rectView.frame.size.height
+            if self.isHori {
+                if self.minus <= 0 && oX > 0 {
+                    self.minus = oX - cz.origin.x
+                }
+            } else {
+                self.minus = 0.0
+            }
             self.rectView.backgroundColor = UIColor.clear
             self.backView?.addSubview(rectView)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -705,12 +721,6 @@ extension GHDetectionTool {
                             let detectionResult = self.doneDetection(points: pt)
                             self.doneNotice?(detectionResult)
                             self.transaction = nil
-                            #if DEBUG
-                            let image = GHOpenCVBridge.shareManager().showLastOutlet()
-                            self.finalImage = image
-                            self.imageView.image = image
-                            self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
-                            #endif
                         } else {
                             self.doneFailed()
                         }
@@ -719,13 +729,6 @@ extension GHDetectionTool {
             }
         } else {
             if let pre = self.preImg, let prepostProcessor = self.prepostProcessor, !isInProcess {
-                
-                if let compare = scaleImage(pre, toSize: CGSize(width: rectView.frame.size.width, height: rectView.frame.size.height)) {
-                    print("log.p ====== ")
-//                    #if DEBUG
-//                    self.saveImageToAlbum(image: compare)
-//                    #endif
-                }
                 
                 if let oriimage = scaleImage(pre, toSize: CGSize(width: 640, height: 640)) {
                     // 必须得有这一步 不然就会有问题
@@ -757,7 +760,7 @@ extension GHDetectionTool {
                             // 回调主线程绘图
                             DispatchQueue.main.async {
                                 print("log.p ======= count \(nmsPredictions.count)")
-                                prepostProcessor.showPreDetection(view: self.rectView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes)
+                                prepostProcessor.showPreDetection(view: self.rectView, nmsPredictions: nmsPredictions, classes: self.inferencer.classes, self.isHori, self.minus)
                                 // 回调识别结果 组装结果业务数据
                                 var res = DetectionResult()
                                 var finalnms = nmsPredictions.filter { $0.score >= 0.2 }

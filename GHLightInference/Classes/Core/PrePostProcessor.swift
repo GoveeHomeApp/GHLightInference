@@ -233,24 +233,42 @@ public class PrePostProcessor : NSObject {
         }
     }
     
-    public func showPreDetection(view: UIView, nmsPredictions: [Prediction], classes: [String]) {
-        debugPrint("Total object \(nmsPredictions.count)")
+    public func showPreDetection(view: UIView, nmsPredictions: [Prediction], classes: [String], _ isHori: Bool = false, _ minus: CGFloat = 0.00) {
+        debugPrint("log.p Total object \(nmsPredictions.count)")
+        debugPrint("log.p view frame is \(view.frame)")
+        let oriWidth = view.frame.size.width
+        let oriHeight = view.frame.size.height
+        print("log.p ===== minus \(minus)")
         view.subviews.map { $0.removeFromSuperview() }
         for pred in nmsPredictions {
             let index = classes[pred.classIndex]
             switch index {
             case "red":
                 let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.blue
-                bbox.layer.cornerRadius = CGFloat(pred.w/2)
+                if isHori {
+                    // 横屏坐标转换 注意x要乘以放缩比例
+                    let transFrame = self.transferFrameToHori(view: view, origin: pred.rect, minus)
+                    bbox.frame = CGRect(x: transFrame.origin.x, y: transFrame.origin.y, width: 10, height: 10)
+                } else {
+                    bbox.frame = CGRect(x: pred.rect.origin.x, y: pred.rect.origin.y, width: 10, height: 10)
+                }
+                bbox.backgroundColor = UIColor.blue.withAlphaComponent(0.8)
+                bbox.layer.cornerRadius = 5
                 bbox.layer.masksToBounds = true
                 if pred.score > 0.20 {
                     view.addSubview(bbox)
                 }
             case "green":
                 let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.blue
-                bbox.layer.cornerRadius = CGFloat(pred.w/2)
+                if isHori {
+                    // 横屏坐标转换 这个地方的位置要乘以宽高变换比例
+                    let transFrame = self.transferFrameToHori(view: view, origin: pred.rect, minus)
+                    bbox.frame = CGRect(x: transFrame.origin.x, y: transFrame.origin.y, width: 10, height: 10)
+                } else {
+                    bbox.frame = CGRect(x: pred.rect.origin.x, y: pred.rect.origin.y, width: 10, height: 10)
+                }
+                bbox.backgroundColor = UIColor.blue.withAlphaComponent(0.8)
+                bbox.layer.cornerRadius = 5
                 bbox.layer.masksToBounds = true
                 if pred.score > 0.20 {
                     view.addSubview(bbox)
@@ -261,6 +279,18 @@ public class PrePostProcessor : NSObject {
         }
     }
     
+    public func transferFrameToHori(view: UIView, origin: CGRect, _ minus: CGFloat = 0.0) -> CGRect {
+        var result = CGRect.zero
+        let oriWidth = view.frame.size.width
+        let oriHeight = view.frame.size.height
+        let originX = origin.origin.y*oriHeight/oriWidth + (view.frame.origin.x*oriHeight/oriWidth) - minus
+        var originY = origin.origin.x*oriHeight/oriWidth
+        let backCenterY = view.frame.size.height/2
+        // 横竖正确，需要沿页面中心X轴镜像翻转
+        originY = abs(originY-2*backCenterY) - minus
+        result = CGRect(x: originX, y: originY, width: origin.size.height, height: origin.size.width)
+        return result
+    }
 
 }
 
