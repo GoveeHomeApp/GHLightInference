@@ -765,6 +765,7 @@ extension GHDetectionTool {
                                     res.points[ind] = [CGFloat(eachPredict.x), CGFloat(eachPredict.y)]
                                 }
                                 self.showCurrentNotice?(res)
+                                GHOpenCVBridge.shareManager().releaseOutProcess()
                                 #if DEBUG
 //                                self.saveImageViewWithSubviewsToPhotoAlbum(imageView: self.imageView)
                                 #endif
@@ -777,35 +778,4 @@ extension GHDetectionTool {
             }
         }
     }
-}
-
-// 单体识别流程 不包含 对齐及推断的业务逻辑
-extension GHDetectionTool {
-    
-    func startTimer() {
-        
-        stopTimer() // 确保之前的定时器已停止
-        // 创建一个 DispatchSourceTimer
-        timer = DispatchSource.makeTimerSource(queue: queue)
-        // 设置定时器触发的时间间隔
-        timer?.schedule(deadline: .now(), repeating: 10.0)
-        // 设置定时器触发时执行的闭包
-        timer?.setEventHandler { [weak self] in
-            self?.timerFired()
-        }
-        // 启动定时器
-        timer?.resume()
-    }
-    
-    func stopTimer() {
-        // 如果定时器存在，则取消它
-        timer?.cancel()
-        timer = nil
-    }
-    
-    private func timerFired() {
-        print("定时器触发了！")
-        self.captureOneFrame()
-    }
-    
 }

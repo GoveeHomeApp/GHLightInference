@@ -290,6 +290,10 @@ void releaseAll() {
     resLp.shrink_to_fit();
 }
 
+- (void)releaseOutProcess {
+    releaseAll();
+}
+
 
 @end
 

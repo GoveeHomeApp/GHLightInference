@@ -26,7 +26,7 @@ public:
     };
 
     static void log(LogLevel level, const char *tag, const char *format, ...) {
-        if (true)return;
+//        if (true)return;
         va_list args;
         va_start(args, format);
 

@@ -283,7 +283,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 
     //计算点位平均距离
     double averageDistance = calculateAverageDistance(processor);
-    drawPointsMatOut(src, processor.normalPoints, outMats);//todo:linpeng
+//    drawPointsMatOut(src, processor.normalPoints, outMats);//todo:linpeng
 
     if (processor.totalPoints.size() > 20) {
         detectOutlierPoints(processor.totalPoints, errorSerialVector, averageDistance, 8);
