@@ -277,6 +277,7 @@ public class PrePostProcessor : NSObject {
                 break
             }
         }
+        view.clipsToBounds = true
     }
     
     public func transferFrameToHori(view: UIView, origin: CGRect, _ minus: CGFloat = 0.0) -> CGRect {
