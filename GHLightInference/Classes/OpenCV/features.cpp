@@ -19,15 +19,15 @@
 /**
  * 得分计算序列
  */
-vector<vector<int>> scoreVV = {{0, 1,   2},
-                               {0, 3,   5},
-                               {0, 6,   10},
-                               {0, 11,  19},
-                               {0, 20,  36},
-                               {0, 37,  69},
-                               {0, 70,  134},
-                               {0, 135, 263},
-                               {0, 264, 520}};
+vector<vector<int>> scoreVV = {{-1000, 1,   2},
+                               {-1000, 3,   5},
+                               {-1000, 6,   10},
+                               {-1000, 11,  19},
+                               {-1000, 20,  36},
+                               {-1000, 37,  69},
+                               {-1000, 70,  134},
+                               {-1000, 135, 263},
+                               {-1000, 264, 520}};
 
 //绿 红 绿 红 绿 绿 绿 绿 绿
 //2+3+10+11+36+69+134+263+520
@@ -128,8 +128,8 @@ sortStripByStep(int frameStep, vector<LightPoint> &resultObjects, int lightTypeP
                 vector<Point2f> missing_leds = detector.findMissingLEDs();
                 LOGW(LOG_TAG, " 查找遗漏的灯珠 missing_leds = %d KnownPositions = %d",
                      missing_leds.size(), detector.getKnownPositions().size());
-//            Mat result = detector.visualize();
-//            outMats.push_back(result);
+//                Mat result = detector.visualize();//todo: linpeng
+//                outMats.push_back(result);
                 pPointXys.clear();
                 pPoints.clear();
                 for (const auto &item: detector.getKnownPositions()) {
@@ -209,11 +209,11 @@ void drawPointsMatOut(const Mat &src, const vector<LightPoint> lightPoints, vect
                 }
                 center.x = static_cast<int>(center.x);
                 center.y = static_cast<int>(center.y);
-                circle(dstCircle, center, 7, Scalar(0, 255, 255, 150), 2);
+                circle(dstCircle, center, 8, Scalar(255, 0, 0, 150), 2);
                 putText(dstCircle, to_string(lightPoint.label), center,
                         FONT_HERSHEY_SIMPLEX,
                         0.6,
-                        Scalar(0, 0, 255),
+                        Scalar(255, 0, 0),
                         1);
             } catch (...) {}
         }
@@ -1361,21 +1361,26 @@ findColorType(const Mat &src, int stepFrame, const vector<LightPoint> &points,
     try {
         Mat meanColorMat = src.clone();
         vector<vector<Point>> contours;
-//        Mat gray;
-//        cvtColor(meanColorMat, gray, COLOR_BGR2GRAY);
-//
+
 //        // 预处理
         Mat blurred;
-        GaussianBlur(src, blurred, Size(5, 5), 1.5);
-//
-//        Mat binary;
-//        threshold(blurred, binary, 200, 255, THRESH_BINARY);
-//
-//        // 确保binary是CV_8UC1格式
-//        if (binary.type() != CV_8UC1) {
-//            binary.convertTo(binary, CV_8UC1);
-//        }
-//        findContours(binary.clone(), contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        cv::Mat lab, enhanced;
+        cv::cvtColor(src, lab, cv::COLOR_BGR2Lab);
+
+//        outMats.push_back(lab);
+
+        // CLAHE增强
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
+        std::vector<cv::Mat> labChannels(3);
+        cv::split(lab, labChannels);
+        clahe->apply(labChannels[0], labChannels[0]);
+
+        cv::merge(labChannels, lab);
+        cv::cvtColor(lab, enhanced, cv::COLOR_Lab2BGR);
+
+        GaussianBlur(enhanced, blurred, Size(5, 5), 1.5);
+
         // 转换到HSV色彩空间
         for (auto lPoint: points) {
             Scalar scalar;
@@ -1389,6 +1394,84 @@ findColorType(const Mat &src, int stepFrame, const vector<LightPoint> &points,
         LOGE(LOG_TAG, "findColorType 时发生异常: %s", e.what());
 
     }
+    return result;
+}
+
+// 判断灯珠颜色
+CUS_COLOR_TYPE detectBulbColor(const cv::Mat &roi) {
+    cv::Mat hsv;
+    cv::cvtColor(roi, hsv, cv::COLOR_BGR2HSV);
+
+    // 红色和绿色的HSV范围
+    cv::Scalar redLower1(0, 100, 100);
+    cv::Scalar redUpper1(10, 255, 255);
+    cv::Scalar redLower2(160, 100, 100);
+    cv::Scalar redUpper2(180, 255, 255);
+
+    cv::Scalar greenLower(35, 100, 100);
+    cv::Scalar greenUpper(85, 255, 255);
+
+    cv::Mat redMask1, redMask2, greenMask;
+    cv::inRange(hsv, redLower1, redUpper1, redMask1);
+    cv::inRange(hsv, redLower2, redUpper2, redMask2);
+    cv::inRange(hsv, greenLower, greenUpper, greenMask);
+
+    cv::Mat redMask = redMask1 | redMask2;
+
+    double redPixels = cv::countNonZero(redMask);
+    double greenPixels = cv::countNonZero(greenMask);
+
+    if (redPixels > greenPixels) return E_RED;
+    return E_GREEN;
+}
+
+// 新增函数：创建圆环区域
+Mat buildAnnulusRegion(Point2f center, const Mat &image, double innerRadius, double outerRadius) {
+    // 检查中心点是否在图像范围内
+    if (center.x < 0 || center.x >= image.cols ||
+        center.y < 0 || center.y >= image.rows) {
+        LOGW(LOG_TAG, "Center point is outside image boundaries");
+        return Mat();
+    }
+
+    // 计算可能的最大半径
+    double maxRadius = min({
+                                   center.x,                // 左边界
+                                   image.cols - center.x,   // 右边界
+                                   center.y,                // 上边界
+                                   image.rows - center.y    // 下边界
+                           });
+
+    // 如果需要的外圆半径超过图像范围，则调整半径
+    if (outerRadius > maxRadius) {
+        LOGW(LOG_TAG, "Requested outer radius exceeds image boundaries. Adjusting radius.");
+        outerRadius = maxRadius;
+    }
+
+    // 确保内圆半径小于外圆半径
+    innerRadius = min(innerRadius, outerRadius - 1);
+
+    // 创建掩码
+    Mat mask = Mat::zeros(image.size(), CV_8UC1);
+
+    // 安全地绘制圆环
+    try {
+        circle(mask, center, outerRadius, Scalar(255), -1);
+        circle(mask, center, innerRadius, Scalar(0), -1);
+    } catch (const std::exception &e) {
+        LOGE(LOG_TAG, "Error creating annulus mask: %s", e.what());
+        return Mat();
+    }
+
+    // 应用掩码
+    Mat result;
+    try {
+        image.copyTo(result, mask);
+    } catch (const std::exception &e) {
+        LOGE(LOG_TAG, "Error applying mask: %s", e.what());
+        return Mat();
+    }
+
     return result;
 }
 
@@ -1425,7 +1508,7 @@ meanLightColor(const Mat &image, const vector<vector<Point>> &contours, int step
 
         Point2f center = Point2f(safeR.x + maxLoc.x, safeR.y + maxLoc.y);
         // 以最亮点为圆心，半径为 8 的圆形区域，判断该区域是否为亮绿色或亮红色
-        Mat regionReCheck = buildRect(center, image, forceRadius);
+        Mat regionReCheck = buildRect(center, image, forceRadius - 4);
 
         avgPixelIntensity = mean(regionReCheck); // 计算圆形区域的平均颜色
 
@@ -1434,24 +1517,26 @@ meanLightColor(const Mat &image, const vector<vector<Point>> &contours, int step
         double red = avgPixelIntensity[2];
         double bri = 0;
 
-//        LOGD(LOG_TAG, "blue = %f green = %f red = %f", blue, green, red);
-
-        if (red * 1.1 > green) {//red > blue &&  * 1.1
+        LOGD(LOG_TAG, "blue = %f green = %f red = %f", blue, green, red);
+//        colorType =detectBulbColor(regionReCheck);
+        if (red > green) {//red > blue &&  * 1.1
             colorType = E_RED;
-        } else if (green > red) {// && green > blue
+        } else if (green > red * 1.1) {// && green > blue
             colorType = E_GREEN;
         } else if (forceRadius > 6) {
             LOGV(LOG_TAG, "meanColor= 无法识别");
-            regionReCheck = buildRect(center, image, forceRadius - 2);
+            // 检查内圆半径为4，外圆半径为8的圆环区域
+//            regionReCheck = buildAnnulusRegion(center, image, 3, 8);
+            regionReCheck = buildRect(center, image, forceRadius + 2);
             if (!regionReCheck.empty()) {
                 avgPixelIntensity = mean(regionReCheck);
                 blue = avgPixelIntensity[0];
                 green = avgPixelIntensity[1];
                 red = avgPixelIntensity[2];
 //                LOGW(LOG_TAG, "blue = %f green = %f red = %f", blue, green, red);
-                if (red * 1.1 > green) {//red > blue &&  * 1.1
+                if (red > green * 1.1) {//red > blue &&  * 1.1
                     colorType = E_RED;
-                } else if (green > red) {// && green > blue
+                } else if (green > red * 1.1) {// && green > blue
                     colorType = E_GREEN;
                 } else {
                     LOGW(LOG_TAG, "meanColor= 无法识别---2");
