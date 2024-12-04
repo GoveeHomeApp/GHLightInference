@@ -299,9 +299,6 @@ private:
                         .size(), INTER_LINEAR + WARP_INVERSE_MAP);
             }
             return alignedImg;
-        } catch (std::exception &e) {
-            LOGE(LOG_TAG, "alignImgEcc , e = %s", e.what());
-            return trans;
         } catch (...) {
             LOGE(LOG_TAG, "alignImgEcc error");
             return trans;

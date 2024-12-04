@@ -615,12 +615,12 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
 
         double angleSelect = 0;
         if (abs(pointRight.x - mu.m10 / mu.m00) > abs(mu.m10 / mu.m00 - pointLeft.x)) {
-            pointRight.x = pointRight.x - 5;
+            pointRight.x = pointRight.x - 3;
             //取右边点
             int leftX = mu.m10 / mu.m00 - (pointRight.x - mu.m10 / mu.m00);
             pointLeft = Point2f(leftX, pointRight.y);
         } else {
-            pointLeft.x = pointLeft.x + 5;
+            pointLeft.x = pointLeft.x + 3;
             int rightX = mu.m10 / mu.m00 + (mu.m10 / mu.m00 - pointLeft.x);
             pointRight = Point2f(rightX, pointLeft.y);
         }
@@ -635,8 +635,8 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
         if (angleSelect <= 5) {
             LOGE(LOG_TAG, "左右均无有效斜边");
             return 0;
-        } else if (angleSelect > 77) {
-            angleSelect = 77;
+        } else if (angleSelect > 80) {
+            angleSelect = 80;
         }
 
         circle(image, pointRight,

@@ -1,9 +1,11 @@
 #include <iostream>
 #include <map>
 #include "sequence.hpp"
-
-const int red = -65536;
-const int green = -16711936;
+//red: -65536  -3670016
+//green: -16711936  -16726016
+//blue: -16776961  -16777016
+const int red = -65536;//200  -3670016
+const int green = -16711936;//-16726016
 const int blue = -16776961;
 const int empty = -16711423;
 const vector<int> numbers = {red, green, blue};

@@ -136,7 +136,7 @@ public:
 
         // 更新特征参数
         if (!brightnesses.empty()) {
-            double bri = *max_element(brightnesses.begin(), brightnesses.end()) * 0.95;
+            double bri = *max_element(brightnesses.begin(), brightnesses.end()) * 0.88;
             features.brightness_threshold =
                     max(bri, 200.0);
             LOGD(LOG_TAG, "更新参数  brightness_threshold=%f  bri=$bri",

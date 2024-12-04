@@ -283,7 +283,7 @@ sortLampBeads(Mat &src, vector<Mat> &outMats, vector<Point2f> &trapezoid4Points)
 
     //计算点位平均距离
     double averageDistance = calculateAverageDistance(processor);
-//    drawPointsMatOut(src, processor.normalPoints, outMats);//todo:linpeng
+//    drawPointsMatOut(src, processor.normalPoints, outMats);//todo: linpeng
 
     if (processor.totalPoints.size() > 20) {
         detectOutlierPoints(processor.totalPoints, errorSerialVector, averageDistance, 8);
@@ -1047,8 +1047,7 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                     if (it->label > getIcNum()) {
                         break;
                     }
-                } catch (const std::exception &e) {
-                    LOGE(LOG_TAG, "访问 label 时发生异常: %s", e.what());
+                } catch (...) {
                     break;
                 }
             }
@@ -1458,8 +1457,8 @@ Mat buildAnnulusRegion(Point2f center, const Mat &image, double innerRadius, dou
     try {
         circle(mask, center, outerRadius, Scalar(255), -1);
         circle(mask, center, innerRadius, Scalar(0), -1);
-    } catch (const std::exception &e) {
-        LOGE(LOG_TAG, "Error creating annulus mask: %s", e.what());
+    } catch (...) {
+//        LOGE(LOG_TAG, "Error creating annulus mask: %s", e.what());
         return Mat();
     }
 
@@ -1467,8 +1466,8 @@ Mat buildAnnulusRegion(Point2f center, const Mat &image, double innerRadius, dou
     Mat result;
     try {
         image.copyTo(result, mask);
-    } catch (const std::exception &e) {
-        LOGE(LOG_TAG, "Error applying mask: %s", e.what());
+    } catch (...) {
+//        LOGE(LOG_TAG, "Error applying mask: %s", e.what());
         return Mat();
     }
 
@@ -1515,9 +1514,8 @@ meanLightColor(const Mat &image, const vector<vector<Point>> &contours, int step
         double blue = avgPixelIntensity[0];
         double green = avgPixelIntensity[1];
         double red = avgPixelIntensity[2];
-        double bri = 0;
 
-        LOGD(LOG_TAG, "blue = %f green = %f red = %f", blue, green, red);
+//        LOGD(LOG_TAG, "blue = %f green = %f red = %f", blue, green, red);
 //        colorType =detectBulbColor(regionReCheck);
         if (red > green) {//red > blue &&  * 1.1
             colorType = E_RED;
