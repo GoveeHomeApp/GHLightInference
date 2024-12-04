@@ -1035,6 +1035,10 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                 }
                 it = newPosition;
                 // 注意边界判断
+                int dis1 = totalPoints.end() - it - 1;
+                if (dis1 >= totalPoints.size()) {
+                    break;
+                }
                 if (dis >= totalPoints.size()) {
                     break;
                 }
@@ -1043,13 +1047,14 @@ void decisionRightLeftPoints(vector<LightPoint> &totalPoints, bool findErrorPoin
                     break;
                 }
                 // 使用安全的方式访问 label
-                try {
-                    if (it->label > getIcNum()) {
-                        break;
-                    }
-                } catch (...) {
-                    break;
-                }
+//                try {
+//                    if (it->label > getIcNum()) {
+//                        break;
+//                    }
+//                } catch (const std::exception &e) {
+//                    LOGE(LOG_TAG, "访问 label 时发生异常: %s", e.what());
+//                    break;
+//                }
             }
         }
     } catch (...) {
