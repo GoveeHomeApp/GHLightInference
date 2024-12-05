@@ -114,9 +114,10 @@ public:
 //            auto end = std::chrono::high_resolution_clock::now();
 //            std::chrono::duration<double> diff = end - start;
 //            LOGD(LOG_TAG, "Aligning image took %f seconds", diff.count());
-        } catch (const std::exception &e) {
-            LOGE(LOG_TAG, "Error aligning image  e =  %s", e.what());
+        } catch (...) {
+//            LOGE(LOG_TAG, "Error aligning image  e =  %s", e.what());
 //            aligned = alignImgEcc(firstImage, image);
+            return image;
         }
         return aligned;
     }
@@ -269,6 +270,8 @@ private:
                 warp_matrix = Mat::eye(3, 3, CV_32F);
             } else {
                 //MOTION_EUCLIDEAN
+//                motionTypeSet = MOTION_EUCLIDEAN;
+                warp_matrix = Mat::eye(2, 3, CV_32F);
             }
             // 降低图像分辨率
             // 创建掩膜，指定搜索区域
