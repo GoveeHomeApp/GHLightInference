@@ -206,7 +206,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 if self.preImageArray.count == GHOpenCVBridge.shareManager().getMaxStep() {
                     self.finishFrameNotice?(true)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.runOnlyDetect(pre: self.preImageArray.first!) { [weak self] ct in
+                        self.runOnlyDetect(pre: self.preImageArray.last!) { [weak self] ct in
                             guard let `self` = self else { return }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 print("log.ppp ==== \(ct)")
