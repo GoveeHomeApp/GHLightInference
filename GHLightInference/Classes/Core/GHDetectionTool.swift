@@ -521,9 +521,6 @@ extension GHDetectionTool {
             if self.preImageArray.count == self.afterImgArray.count {
                 finishHandler()
             }
-        } catch let error as NSError {
-            print("log.f ====== RFAILED Caught an Objective-C exception: \(error.localizedDescription)")
-            self.doneFailed()
         } catch {
             print("log.f ====== RFAILED Caught a Swift error: \(error)")
             self.doneFailed()
