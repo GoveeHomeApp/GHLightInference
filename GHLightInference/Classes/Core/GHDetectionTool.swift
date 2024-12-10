@@ -474,7 +474,8 @@ extension GHDetectionTool {
                     outputs = op
                     // 预测数据
                     let nmsPredictions = prepostProcessor.originOutputsToNMSPredictions(outputs: outputs, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
-                    complete(nmsPredictions.count)
+                    let ct = nmsPredictions.filter { $0.score > 0.2 }
+                    complete(ct.count)
                 } else {
                     complete(0)
                 }
@@ -573,7 +574,7 @@ extension GHDetectionTool {
                     if let data = resultJsonString.data(using: .utf8) {
                         let dt = try?JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
                         let pointbase = LightQueueBase.deserialize(from: dt)
-                        if let pt = pointbase, !pt.lightPoints.isEmpty {
+                        if let pt = pointbase, !pt.lightPoints.isEmpty && pt.lightPoints.count > 10 {
                             var indexArr: [Int] = []
                             if self.bizType == 0 {
                                 print("Count \(pt.lightPoints.count)")
