@@ -208,7 +208,6 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         self.runOnlyDetect(pre: self.preImageArray.first!) { [weak self] ct in
                             guard let `self` = self else { return }
-                            self.imageView.image = self.afterImgArray.first
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 self.runDetection()
                                 print("log.ppp ==== \(ct)")
