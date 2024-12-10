@@ -268,6 +268,7 @@ private:
                 warp_matrix = Mat::eye(3, 3, CV_32F);
             } else {
                 //MOTION_EUCLIDEAN
+                warp_matrix = Mat::eye(2, 3, CV_32F);
             }
             // 降低图像分辨率
             // 创建掩膜，指定搜索区域

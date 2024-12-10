@@ -206,11 +206,27 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 if self.preImageArray.count == GHOpenCVBridge.shareManager().getMaxStep() {
                     self.finishFrameNotice?(true)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.alignmentAll { [weak self] in
+                        self.runOnlyDetect(pre: self.preImageArray.first!) { [weak self] ct in
                             guard let `self` = self else { return }
                             self.imageView.image = self.afterImgArray.first
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 self.runDetection()
+                                print("log.ppp ==== \(ct)")
+                                let target = self.bizType == 0 ? 5 : 0
+                                if ct > target {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        self.alignmentAll { [weak self] in
+                                            guard let `self` = self else { return }
+                                            self.imageView.image = self.afterImgArray.first
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                                self.runDetection()
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // 个数太少直接抛失败
+                                    self.doneFailed()
+                                }
                             }
                         }
                     }
@@ -440,6 +456,34 @@ extension GHDetectionTool {
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints, preImageArray: self.preImageArray)
         return result
     }
+    
+    // 识别灯珠onlyDetect
+    func runOnlyDetect(pre: UIImage, complete: @escaping(Int) -> Void) {
+        if let oriimage = scaleImage(pre, toSize: CGSize(width: 640, height: 640)), let prepostProcessor = self.prepostProcessor, let pV = self.previewLayer {
+            // 必须得有这一步 不然就会有问题
+            let image = GHOpenCVBridge.shareManager().alignment(with:oriimage, step: 0, rotation: false) { [weak self] err in complete(0); return }
+            let imgScaleX = Double(pre.size.width / CGFloat(prepostProcessor.inputWidth));
+            let imgScaleY = Double(pre.size.height / CGFloat(prepostProcessor.inputHeight));
+            let ivScaleX : Double = Double(pV.frame.size.width / pre.size.width)
+            let ivScaleY : Double = Double(pV.frame.size.width / pre.size.width)
+            let startX = Double((pV.frame.size.width - CGFloat(ivScaleX) * pre.size.width)/2)
+            let startY = Double((pV.frame.size.height -  CGFloat(ivScaleY) * pre.size.height)/2)
+            guard var pixelBuffer = image.normalized() else { complete(0); return }
+            DispatchQueue.global().async {
+                var outputs: [NSNumber] = []
+                // 处理识别异常捕获
+                if let op = self.inferencer.module.detect(image: &pixelBuffer) {
+                    outputs = op
+                    // 预测数据
+                    let nmsPredictions = prepostProcessor.originOutputsToNMSPredictions(outputs: outputs, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
+                    complete(nmsPredictions.count)
+                } else {
+                    complete(0)
+                }
+            }
+        }
+    }
+
     // 识别灯珠
     func runDetection() {
         // 只对第一张图进行识别
