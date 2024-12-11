@@ -290,7 +290,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         
                         // 先调用一次识别
-                        self.runOnlyDetect(pre: self.preImageArray.first!) { [weak self] ct in
+                        self.runOnlyDetect(pre: self.preImageArray.last!) { [weak self] ct in
                             guard let `self` = self else { return }
                             print("log.ppp ==== \(ct)")
                             let target = self.bizType == 0 ? 5 : 0
@@ -591,7 +591,8 @@ extension GHDetectionTool {
                     outputs = op
                     // 预测数据
                     let nmsPredictions = prepostProcessor.originOutputsToNMSPredictions(outputs: outputs, imgScaleX: imgScaleX, imgScaleY: imgScaleY, ivScaleX: ivScaleX, ivScaleY: ivScaleY, startX: startX, startY: startY)
-                    complete(nmsPredictions.count)
+                    let res = nmsPredictions.filter { $0.score > 0.2 }
+                    complete(res.count)
                 } else {
                     complete(0)
                 }
@@ -693,7 +694,7 @@ extension GHDetectionTool {
                     if let data = resultJsonString.data(using: .utf8) {
                         let dt = try?JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
                         let pointbase = LightQueueBase.deserialize(from: dt)
-                        if let pt = pointbase, !pt.lightPoints.isEmpty {
+                        if let pt = pointbase, !pt.lightPoints.isEmpty && pt.lightPoints.count > 10 {
                             var indexArr: [Int] = []
                             if self.bizType == 0 {
                                 print("Count \(pt.lightPoints.count)")
