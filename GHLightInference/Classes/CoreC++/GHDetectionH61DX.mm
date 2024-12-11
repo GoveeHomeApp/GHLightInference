@@ -39,6 +39,8 @@ using namespace std;
     return result;
 }
 
+#if DEBUG
+
 - (void)debugDetection:(UIImage *)originImage threshold:(UIImage *)thresholdImage callback:(void (^)(NSArray<UIImage *> * _Nonnull))callback {
     Mat origin = [GHOpenCVBasic cvMatFromUIImage:originImage];
     Mat threshold = [GHOpenCVBasic cvMatFromUIImage:thresholdImage];
@@ -53,5 +55,6 @@ using namespace std;
         callback(result);
     });
 }
+#endif
 
 @end
