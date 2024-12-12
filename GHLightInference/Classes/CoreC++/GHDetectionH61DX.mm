@@ -10,6 +10,7 @@
 #include <opencv2/core/mat.hpp>
 #import "GHOpenCVBasic.h"
 #include "DetectionH61DX.hpp"
+#include "ColorCodingH61DX.hpp"
 
 using namespace cv;
 using namespace std;
@@ -32,7 +33,7 @@ using namespace std;
 
 - (NSArray<NSNumber *> *)getDetectionColors {
     NSMutableArray * result = [NSMutableArray array];
-    auto colors = _detection.getDetectionColors();
+    auto colors = ColorCodingH61DX(int(_icCount)).getDetectionColors();
     for_each(colors.begin(), colors.end(), [&result](int item) {
         [result addObject:@(item)];
     });
@@ -41,13 +42,14 @@ using namespace std;
 
 #if DEBUG
 
-- (void)debugDetection:(UIImage *)originImage threshold:(UIImage *)thresholdImage callback:(void (^)(NSArray<UIImage *> * _Nonnull))callback {
+- (void)debugDetection:(UIImage *)originImage callback:(void (^)(NSArray<UIImage *> * _Nonnull))callback {
     Mat origin = [GHOpenCVBasic cvMatFromUIImage:originImage];
-    Mat threshold = [GHOpenCVBasic cvMatFromUIImage:thresholdImage];
-    _detection.debugDetection(origin, threshold, [&callback](std::vector<cv::Mat> arr) {
+    _detection.debugDetection(origin, [&callback](std::vector<cv::Mat> arr) {
         NSMutableArray * result = [NSMutableArray array];
         for_each(arr.begin(), arr.end(), [&result](cv::Mat m){
-            UIImage *img = [GHOpenCVBasic UIImageFromCVMat:m];
+            cv::Mat t;
+            cv::cvtColor(m, t, cv::COLOR_BGR2RGBA);
+            UIImage *img = [GHOpenCVBasic UIImageFromCVMat:t];
             if (img) {
                 [result addObject:img];
             }

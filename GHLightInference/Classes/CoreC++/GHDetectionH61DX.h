@@ -21,7 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 #if DEBUG
 
-- (void)debugDetection:(UIImage *)originImage threshold:(UIImage *)thresholdImage callback:(void(^)(NSArray<UIImage *> *))callback;
+- (void)debugDetection:(UIImage *)originImage callback:(void(^)(NSArray<UIImage *> *))callback;
 
 #endif
 
