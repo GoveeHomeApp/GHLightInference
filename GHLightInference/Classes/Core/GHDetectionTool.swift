@@ -47,8 +47,8 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     private var capFinishHandler: (() -> Void)?
     // 是否在当前识别流程内 => 通过transaction去判断
     // 间隔3s识别一次
-    var queue: DispatchQueue?
-    var timer: DispatchSourceTimer?
+    let queue: DispatchQueue = DispatchQueue.main
+    let group = DispatchGroup()
     
     private var realFrame: CGRect?
     private var backView: UIView?
@@ -113,8 +113,6 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         self.setupBindings()
         // 启动AVFoundation
         self.startingIFrame()
-        self.queue = DispatchQueue(label: "com.govee.goveehome.light_inferrer_timer", qos: .default, attributes: .init(), autoreleaseFrequency: .workItem, target: .global(qos: .default))
-//        self.startTimer()
     }
     
     // 初始化AVCaptureSession
@@ -197,7 +195,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         
         self.stopReconHandler = { [weak self] in
             guard let `self` = self else { return }
-            self.queue = nil
+            
         }
         
         // 识别一次 就会调用这个
@@ -288,13 +286,11 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 if self.preImageArray.count == GHOpenCVBridge.shareManager().getMaxStep() {
                     self.finishFrameNotice?(true)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        
-                        // 先调用一次识别
-                        self.runOnlyDetect(pre: self.preImageArray.last!) { [weak self] ct in
+                        // 先调用识别
+                        self.runBatchDetect { [weak self] success in
                             guard let `self` = self else { return }
-                            print("log.ppp ==== \(ct)")
-                            let target = self.bizType == 0 ? 5 : 0
-                            if ct > target {
+                            print("log.ppp ==== \(success)")
+                            if success {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     self.alignmentAll { [weak self] in
                                         guard let `self` = self else { return }
@@ -572,6 +568,26 @@ extension GHDetectionTool {
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints, preImageArray: self.preImageArray)
         return result
     }
+    
+    func runBatchDetect(complete: @escaping(Bool) -> Void) {
+        if self.preImageArray.isEmpty { complete(false) }
+        var resArr: [Int] = []
+        for (idx, img) in self.preImageArray.enumerated() {
+            group.enter()
+            queue.async(group: group) {
+                self.runOnlyDetect(pre: img) { [weak self] ct in
+                    resArr.append(ct)
+                    print("log.ppp ====== \(resArr)")
+                    self?.group.leave()
+                }
+            }
+        }
+        group.notify(queue: .main) {
+            let fin = resArr.filter { $0 < 20 }
+            complete(fin.isEmpty)
+        }
+    }
+    
     // 识别灯珠onlyDetect
     func runOnlyDetect(pre: UIImage, complete: @escaping(Int) -> Void) {
         if let oriimage = scaleImage(pre, toSize: CGSize(width: 640, height: 640)), let prepostProcessor = self.prepostProcessor {
