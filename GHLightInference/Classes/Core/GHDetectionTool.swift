@@ -72,7 +72,7 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public var finalImage: UIImage?
     private var sc:(Double, Double) = (0.0, 0.0)
     
-    let queue: DispatchQueue = DispatchQueue(label: "com.govee.goveehome.light_inferrer_timer", qos: .default, attributes: .init(), autoreleaseFrequency: .workItem, target: .global(qos: .default))
+    let queue: DispatchQueue = DispatchQueue.main
     let group = DispatchGroup()
     
     public init(sku: String, ic: Int, dimension: String, initializeFinishNotice:(() -> Void)? = nil, finishFrameNotice: ((Bool) -> Void)? = nil ,frameNotice: ((DetectionEffectModel) -> Void)? = nil, doneNotice: ((DetectionResult?) -> Void)? = nil) {
@@ -461,9 +461,10 @@ extension GHDetectionTool {
         for (idx, img) in self.preImageArray.enumerated() {
             group.enter()
             queue.async(group: group) {
-                self.runOnlyDetect(pre: img) { ct in
+                self.runOnlyDetect(pre: img) { [weak self] ct in
                     resArr.append(ct)
                     print("log.ppp ====== \(resArr)")
+                    self?.group.leave()
                 }
             }
         }
