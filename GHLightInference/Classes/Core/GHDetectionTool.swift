@@ -72,6 +72,9 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     public var finalImage: UIImage?
     private var sc:(Double, Double) = (0.0, 0.0)
     
+    let queue: DispatchQueue = DispatchQueue(label: "com.govee.goveehome.light_inferrer_timer", qos: .default, attributes: .init(), autoreleaseFrequency: .workItem, target: .global(qos: .default))
+    let group = DispatchGroup()
+    
     public init(sku: String, ic: Int, dimension: String, initializeFinishNotice:(() -> Void)? = nil, finishFrameNotice: ((Bool) -> Void)? = nil ,frameNotice: ((DetectionEffectModel) -> Void)? = nil, doneNotice: ((DetectionResult?) -> Void)? = nil) {
         self.sku = sku
         self.ic = ic
@@ -206,25 +209,22 @@ public class GHDetectionTool: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 if self.preImageArray.count == GHOpenCVBridge.shareManager().getMaxStep() {
                     self.finishFrameNotice?(true)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.runOnlyDetect(pre: self.preImageArray.last!) { [weak self] ct in
+                        self.runBatchDetect() { [weak self] success in
                             guard let `self` = self else { return }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                print("log.ppp ==== \(ct)")
-                                let target = self.bizType == 0 ? 5 : 0
-                                if ct > target {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        self.alignmentAll { [weak self] in
-                                            guard let `self` = self else { return }
-                                            self.imageView.image = self.afterImgArray.first
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                                self.runDetection()
-                                            }
+                            print("log.ppp ==== \(success)")
+                            if success {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    self.alignmentAll { [weak self] in
+                                        guard let `self` = self else { return }
+                                        self.imageView.image = self.afterImgArray.first
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                            self.runDetection()
                                         }
                                     }
-                                } else {
-                                    // 个数太少直接抛失败
-                                    self.doneFailed()
                                 }
+                            } else {
+                                // 个数太少直接抛失败
+                                self.doneFailed()
                             }
                         }
                     }
@@ -453,6 +453,24 @@ extension GHDetectionTool {
         }
         let result = DetectionResult(points: pointsDict, anchorPoints: anchorPoints, pixelScale: [960.0, 1280.0], objectPoints: points.lightPoints, preImageArray: self.preImageArray)
         return result
+    }
+    
+    func runBatchDetect(complete: @escaping(Bool) -> Void) {
+        if self.preImageArray.isEmpty { complete(false) }
+        var resArr: [Int] = []
+        for (idx, img) in self.preImageArray.enumerated() {
+            group.enter()
+            queue.async(group: group) {
+                self.runOnlyDetect(pre: img) { ct in
+                    resArr.append(ct)
+                    print("log.ppp ====== \(resArr)")
+                }
+            }
+        }
+        group.notify(queue: .main) {
+            let fin = resArr.filter { $0 < 20 }
+            complete(fin.isEmpty)
+        }
     }
     
     // 识别灯珠onlyDetect
