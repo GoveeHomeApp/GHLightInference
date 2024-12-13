@@ -1,5 +1,6 @@
 #include "PictureH61DX.hpp"
 #include "logger.hpp"
+#include "GroupUtilH61DX.hpp"
 
 using namespace cv;
 using namespace std;
@@ -23,9 +24,10 @@ cv::Mat PictureH61DX::processImage(cv::Mat& image)
     // 开运算2次
     Mat openedImage;
     morphologyEx(replacedImage, openedImage, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(3, 3)), Point(-1, -1), 2);
+    auto span = GroupUtilH61DX::getSpan(openedImage);
     // 闭运算1次
     Mat closeImage;
-    morphologyEx(openedImage, closeImage, MORPH_CLOSE, getStructuringElement(MORPH_RECT, Size(3, 3)), Point(-1, -1), 1);
+    morphologyEx(openedImage, closeImage, MORPH_CLOSE, getStructuringElement(MORPH_RECT, Size(span, span)), Point(-1, -1), 1);
     return closeImage;
 }
 
@@ -61,7 +63,7 @@ cv::Mat PictureH61DX::purifiedImage(cv::Mat& image)
             int g = pixel[1];
             int r = pixel[2];
             int thresholdHigh = 100;
-            int thresholdSimilar = 50;
+            int thresholdSimilar = 35;
 
             if ((r < thresholdHigh && g < thresholdHigh && b < thresholdHigh) ||
                 (abs(r - g) < thresholdSimilar && abs(r - b) < thresholdSimilar && abs(g - b) < thresholdSimilar)) {

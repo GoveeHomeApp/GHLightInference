@@ -1,13 +1,11 @@
 #include "ColorCodingH61DX.hpp"
+#include "UtilH61DX.hpp"
 
 using namespace std;
+using namespace H61DX;
 
 namespace
 {
-    const int COLOR_RED = 0xFF0000;
-    const int COLOR_GREEN = 0x00FF00;
-    const int COLOR_YELLOW = 0xFFFF00;
-    const int COLOR_BLUE = 0x0000FF;
     const int COLOR_UNIT_COUNT = 3;
     const int START_IC_COUNT = COLOR_UNIT_COUNT;
 

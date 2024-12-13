@@ -24,7 +24,7 @@ public:
     void detection(cv::Mat originImage, std::function<void(std::vector<cv::Point>)> callback);
     
 #if DEBUG
-    void debugDetection(cv::Mat originImage, std::function<void(std::vector<cv::Mat>)> callback);
+    std::vector<cv::Point> debugDetection(cv::Mat originImage, std::function<void(std::vector<cv::Mat>)> callback);
 #endif
 
 private:
