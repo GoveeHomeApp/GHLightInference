@@ -5,6 +5,7 @@
 #include "ColorCodingH61DX.hpp"
 #include "PictureH61DX.hpp"
 #include "GroupUtilH61DX.hpp"
+#include <unordered_set>
 
 using namespace cv;
 using namespace std;
@@ -52,14 +53,20 @@ namespace {
         return startGroups;
     }
 
+    /// 统计不同实例数量的函数
+    template<typename T>
+    size_t count_unique_instances(const std::vector<std::shared_ptr<T>>& vec) {
+        std::unordered_set<const void*> uniqueInstances;
+        for (const auto& ptr : vec) {
+            if (ptr) {
+                uniqueInstances.insert(ptr.get());
+            }
+        }
+        return uniqueInstances.size();
+    }
+
     vector<shared_ptr<GroupH61DX>> sort(const shared_ptr<GroupH61DX>& group, const vector<int>& colors, int index = 0, vector<shared_ptr<GroupH61DX>> nowGroups = {}, const shared_ptr<GroupH61DX>& from = nullptr) {
         if (group == nullptr || index >= colors.size() || group->rgb != colors[index]) {
-            // 如果走完了的，则统计起来，取所有格子都走过的那个
-            // if (index == colors.size() - 1)
-            // {
-                
-            // }
-            
             return nowGroups;
         }
         nowGroups.push_back(group);
@@ -68,9 +75,15 @@ namespace {
             if (from != nullptr && from == next) {
                 continue;
             }
-            auto nextGroups = sort(next, colors, index + 1, nowGroups);
+            auto nextGroups = sort(next, colors, index + 1, nowGroups, group);
             if (nextGroups.size() > result.size()) {
                 result = nextGroups;
+            } else if (nextGroups.size() == result.size()) {
+                auto nowCount = count_unique_instances(nextGroups);
+                auto resultCount = count_unique_instances(result);
+                if (nowCount > resultCount) {
+                    result = nextGroups;
+                }
             }
         }
         
@@ -114,7 +127,16 @@ std::vector<cv::Point> DetectionH61DX::debugDetection(cv::Mat originImage, std::
     _nowImage = PictureH61DX::processImage(_originImage);
     callback({ _originImage, _nowImage });
     
-    auto group = GroupUtilH61DX::group(_nowImage);
+    
+    auto first = GroupUtilH61DX::findFirst(_nowImage);
+    if (first.x == -1)
+    {
+        LOGE(TAG, "Find first failed");
+        return {};
+    }
+
+    auto span = GroupUtilH61DX::getSpan(_nowImage, first);
+    auto group = GroupUtilH61DX::group(_nowImage, span);
     auto startGroups = getStartGroup(group);
     if (startGroups.size() == 0) {
         LOGE(TAG, "Start group is empty");
@@ -136,6 +158,7 @@ std::vector<cv::Point> DetectionH61DX::debugDetection(cv::Mat originImage, std::
     }
     
     // 打印排序结果
+    LOGD(TAG, "<<--------------------- final result --------------------->>");
     for (auto &group : resutlGroups) {
         group->debugPrint();
     }
@@ -151,15 +174,24 @@ std::vector<cv::Point> DetectionH61DX::debugDetection(cv::Mat originImage, std::
     cout << rgbSort << endl;
 
     auto centers = vector<cv::Point>();
-    for (auto &group : resutlGroups) {
-        centers.push_back(getGroupCenter(group));
+    shared_ptr<GroupH61DX> last = nullptr;
+    auto end = resutlGroups.size();
+    for (int i = 0; i < end; ++i) {
+        auto now = resutlGroups[i];
+        shared_ptr<GroupH61DX> next = nullptr;
+        if (i + 1 < end) {
+            next = resutlGroups[i + 1];
+        }
+        auto points = now->getPathCenters(last, next, span);
+        centers.insert(centers.end(), points.begin(), points.end());
+        last = now;
     }
-
+    
     // 新建一个图片，将centers连接起来
     for (size_t i = 1; i < centers.size(); ++i) {
         auto &point = centers[i - 1];
         auto &nextPoint = centers[i];
-        cv::line(_nowImage, point, nextPoint, cv::Scalar(255, 0, 255), 3);
+        cv::line(_nowImage, point, nextPoint, cv::Scalar(255, 0, 255), 2);
     }
     callback({ _nowImage });
 

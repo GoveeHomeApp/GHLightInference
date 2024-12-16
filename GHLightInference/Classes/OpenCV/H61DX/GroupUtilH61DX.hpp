@@ -3,11 +3,13 @@
 
 #include <vector>
 #include <functional>
+#include <optional>
 #include <opencv2/core/mat.hpp>
 #include "UtilH61DX.hpp"
+#include <memory>
 
 /// @brief 颜色分组
-class GroupH61DX {
+class GroupH61DX: public std::enable_shared_from_this<GroupH61DX> {
 public:
     /// @brief 坐标点
     std::vector<cv::Point> points;
@@ -17,8 +19,26 @@ public:
 
     /// @brief 颜色对应的RGB值
     int rgb;
+    
+    /// 分块大小
+    int blockWidth;
+    
+    /// @brief 分组被分割后的块数
+    std::vector<cv::Point> blockCenters;
 
-    GroupH61DX(cv::Vec3b color, std::vector<cv::Point> points) : color(color), points(points), rgb(H61DX::BGR2Int(color)) {};
+    GroupH61DX(cv::Vec3b color, std::vector<cv::Point> points, int span) :
+    color(color),
+    points(points),
+    rgb(H61DX::BGR2Int(color)),
+    blockWidth(span)
+    {
+        this->slicingBlock();
+    };
+    
+    std::shared_ptr<GroupH61DX> getSharedPtr() {
+        return shared_from_this();
+    }
+
 
     /// @brief 添加下一个分组
     void addNext(std::shared_ptr<GroupH61DX> next) {
@@ -36,6 +56,12 @@ public:
         }
         return nexts;
     }
+
+    /// 获取距离指定分组中最近的块中心
+    cv::Point getClosestBlockCenter(const std::shared_ptr<GroupH61DX>& group);
+
+    /// 获取连接路径中心点（从from分组开始，到to分组结束，默认为空）
+    std::vector<cv::Point> getPathCenters(const std::shared_ptr<GroupH61DX>& fromGroup = nullptr, const std::shared_ptr<GroupH61DX>& toGroup = nullptr, int span = 3);
     
 #if DEBUG
     
@@ -60,6 +86,9 @@ public:
 
 private:
     std::vector<std::weak_ptr<GroupH61DX>> nexts;
+    
+    /// 对坐标进行分块
+    void slicingBlock();
 };
 
 
@@ -68,10 +97,9 @@ class GroupUtilH61DX
 {
 public:
     /// @brief 按相同颜色分组
-    static std::vector<std::shared_ptr<GroupH61DX>> group(cv::Mat& image);
+    static std::vector<std::shared_ptr<GroupH61DX>> group(cv::Mat& image, int span);
     /// @brief 获取最大跨度间距
     static int getSpan(cv::Mat& image, const cv::Point& start = cv::Point(-1, -1));
-private:
     /// @brief 查找第一个非0的颜色
     static cv::Point findFirst(cv::Mat& image);
 };

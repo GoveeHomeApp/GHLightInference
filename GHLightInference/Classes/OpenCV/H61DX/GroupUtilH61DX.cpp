@@ -117,7 +117,90 @@ namespace
         return values[values.size() / 2];
     }
 
-    /// 查找color对应的所有联通区域，并返回原图中的坐标点
+    /// 计算两点之间的距离，八个方向
+    int distancePoint(Point a, Point b)
+    {
+        return max(abs(a.x - b.x), abs(a.y - b.y));
+    }
+
+    /// 计算两个分组之间的距离，取最小距离（以所有坐标来计算）
+    int distanceGroup(std::shared_ptr<Group> a, std::shared_ptr<Group> b)
+    {
+        int minDistance = INT_MAX;
+        for (auto &pointA : a->points)
+        {
+            for (auto &pointB : b->points)
+            {
+                int distance = distancePoint(pointA, pointB);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                }
+            }
+        }
+        return minDistance;
+    }
+
+    /// 计算两个分组之间的距离，取最小距离（以所分块中心来计算）
+    int blockCentersDistance(std::shared_ptr<Group> a, std::shared_ptr<Group> b)
+    {
+        int minDistance = INT_MAX;
+        for (auto &pointA : a->blockCenters)
+        {
+            for (auto &pointB : b->blockCenters)
+            {
+                int distance = distancePoint(pointA, pointB);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                }
+            }
+        }
+        return minDistance;
+    }
+
+    /// 合并两个分组
+    void mergeGroup(std::shared_ptr<Group> a, std::shared_ptr<Group> b)
+    {
+        a->points.insert(a->points.end(), b->points.begin(), b->points.end());
+        a->blockCenters.insert(a->blockCenters.end(), b->blockCenters.begin(), b->blockCenters.end());
+        auto next = a->getNexts();
+        auto bNext = b->getNexts();
+        for (auto &nextGroup : bNext)
+        {
+            auto needAdd = true;
+            for (auto &now : next) {
+                if (now == nextGroup) {
+                    needAdd = false;
+                }
+            }
+            if (needAdd) {
+                a->addNext(nextGroup);
+            }
+        }
+    }
+
+    void mergeGroupsLessThanSpan(vector<shared_ptr<Group>> &groups, int span, bool useBlockCenter = false) {
+        for (int i = 0; i < groups.size(); ++i) {
+            for (int j = i + 1; j < groups.size(); ++j) {
+                bool result = false;
+                if (useBlockCenter)
+                {
+                    result = blockCentersDistance(groups[i], groups[j]) <= span;
+                } else
+                {
+                    result = distanceGroup(groups[i], groups[j]) <= span;
+                }
+                if (result) {
+                    mergeGroup(groups[i], groups[j]);
+                    groups.erase(groups.begin() + j);
+                    --j;
+                }
+            }
+        }
+    }
+
+    /// 按颜色进行分组
     vector<shared_ptr<Group>> groupByColor(const cv::Mat &image, cv::Vec3b color, int span, int tolerance = 0)
     {
         // 定义颜色的上下限 (BGR格式)
@@ -132,21 +215,11 @@ namespace
         cv::Mat original_mask;
         cv::inRange(image, lower_bound, upper_bound, original_mask);
 
-        // 如果span大于0，则在副本上进行膨胀操作以连接间隔不超过span的像素
-        cv::Mat dilated_mask = original_mask.clone();
-        if (span > 0)
-        {
-            // 创建一个尺寸为 (2*span + 1) x (2*span + 1) 的结构元素
-            cv::Mat structuringElement = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2 * span + 1, 2 * span + 1));
-            cv::dilate(dilated_mask, dilated_mask, structuringElement);
-        }
-
         // 查找连通区域
         int num_labels = 0;
         cv::Mat labels, stats, centroids;
-        num_labels = cv::connectedComponentsWithStats(dilated_mask, labels, stats, centroids);
+        num_labels = cv::connectedComponentsWithStats(original_mask, labels, stats, centroids);
 
-        // 存储结果的容器
         std::vector<std::vector<cv::Point>> contours;
 
         // 对每个非背景标签，查找轮廓并映射回原始掩码，跳过背景标签0
@@ -174,52 +247,144 @@ namespace
         }
 
         vector<shared_ptr<Group>> groups;
+        vector<int> areas;
         for (auto &contour : contours)
         {
-            // 过滤点太少的，视为干扰（红绿相间会产生黄色）
-            if (contour.size() < span * 2) {
-                continue;
-            }
-            auto group = make_shared<Group>(color, contour);
+            auto group = make_shared<Group>(color, contour, span);
             groups.push_back(group);
+            areas.push_back((int)contour.size());
         }
-        return groups;
-    }
 
-    /// 计算两点之间的距离，八个方向
-    int distancePoint(Point a, Point b) {
-        return max(abs(a.x - b.x), abs(a.y - b.y));
-    }
-
-    /// 计算两个组合之间的距离，取最小距离
-    int distanceGroup(std::shared_ptr<Group> a, std::shared_ptr<Group> b) {
-        int minDistance = INT_MAX;
-        for (auto &pointA : a->points)
+        if (span > 0)
         {
-            for (auto &pointB : b->points)
+            // 求连通面积的中位数
+            int median_area = getMedian(areas);
+            int target_area = median_area * 0.7;
+
+            vector<shared_ptr<Group>> less_groups;
+            vector<shared_ptr<Group>> greater_groups;
+            for (auto &group : groups)
             {
-                int distance = distancePoint(pointA, pointB);
-                if (distance < minDistance)
+                if (group->points.size() < target_area)
                 {
-                    minDistance = distance;
+                    less_groups.push_back(group);
+                }
+                else
+                {
+                    greater_groups.push_back(group);
                 }
             }
+
+            // 合并less_groups中距离小于span的分组（先合并小的，不然分块太小会被忽略掉）(因为像素少，使用像素间比较)
+            mergeGroupsLessThanSpan(less_groups, span, false);
+            greater_groups.insert(greater_groups.end(), less_groups.begin(), less_groups.end());
+            // 合并总的greater_groups中距离小于span的分组（使用分块间比较）
+            mergeGroupsLessThanSpan(greater_groups, span * 2, true);
+            groups = greater_groups;
         }
-        return minDistance;
+
+        vector<shared_ptr<Group>> result;
+        for (auto &group : groups)
+        {
+            // 过滤点太少的，视为干扰（红绿相间会产生黄色）
+            if (group->points.size() < span * 2)
+            {
+                continue;
+            }
+            result.push_back(group);
+        }
+        return result;
+    }
+
+    /**
+     * @brief 使用k-means算法对给定点进行聚类。
+     *
+     * @param points 输入点的集合，每个点都是cv::Point类型。
+     * @param clusterCount 指定想要得到的簇数量。
+     * @return std::vector<cv::Point> 包含簇中心点的向量。
+     */
+    std::vector<cv::Point> kmeansCluster(const std::vector<cv::Point> &points, int clusterCount)
+    {
+        if (points.empty() || clusterCount <= 0)
+        {
+            LOGW(TAG, "Kmeans cluster points is empty.");
+            return {};
+        }
+        std::vector<float> data;
+        for (const auto &pt : points)
+        {
+            data.push_back(static_cast<float>(pt.x));
+            data.push_back(static_cast<float>(pt.y));
+        }
+        if (data.empty())
+        {
+            LOGE(TAG, "Data vector is empty after conversion.");
+            return {};
+        }
+
+        // 创建Mat对象并调整其形状、每个点一行，两个坐标列
+        cv::Mat samples = cv::Mat(data).reshape(1, static_cast<int>(points.size()));
+
+        if (samples.empty())
+        {
+            LOGE(TAG, "Failed to create Mat from data.");
+            return {};
+        }
+
+        std::vector<int> labels; // 存储每个点对应的簇标签
+        cv::Mat centers;         // 存储最终的簇中心
+
+        // 执行k-means聚类
+        cv::kmeans(samples, clusterCount, labels,
+                   cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 10, 1.0),
+                   3,                     // 尝试不同的初始化中心3次
+                   cv::KMEANS_PP_CENTERS, // 使用k-means++算法选择初始中心
+                   centers);
+
+        // 将centers转换回std::vector<cv::Point>
+        std::vector<cv::Point> centerPoints;
+        for (int i = 0; i < centers.rows; ++i)
+        {
+            centerPoints.emplace_back(centers.at<float>(i, 0), centers.at<float>(i, 1));
+        }
+
+        return centerPoints;
+    }
+
+    /// 获取点到两点连成的直线之间的距离
+    float pointToLineDistance(Point p, Point p1, Point p2)
+    {
+        if (p1.x == p2.x && p1.y == p2.y)
+        {
+            return sqrt(pow(p.x - p1.x, 2) + pow(p.y - p1.y, 2));
+        }
+        
+        float a = p2.y - p1.y;
+        float b = p1.x - p2.x;
+        float c = p2.x * p1.y - p1.x * p2.y;
+        return std::abs(a * p.x + b * p.y + c) / std::sqrt(a * a + b * b);
+    }
+
+    /// 获取距离直线距离小于阈值的点
+    vector<Point> getPointsCloseToLine(vector<Point> points, Point p1, Point p2, float distanceThreshold) {
+        vector<Point> result;
+        for (const auto &point : points)
+        {
+            if (pointToLineDistance(point, p1, p2) < distanceThreshold)
+            {
+                result.push_back(point);
+            }
+        }
+        // 将result排序
+        std::sort(result.begin(), result.end(), [&](const Point &a, const Point &b) {
+            return distancePoint(a, p1) < distancePoint(b, p1);
+        });
+        return result;
     }
 }
 
-std::vector<std::shared_ptr<GroupH61DX>> GroupUtilH61DX::group(cv::Mat &image)
+std::vector<std::shared_ptr<GroupH61DX>> GroupUtilH61DX::group(cv::Mat &image, int span)
 {
-    auto first = findFirst(image);
-    if (first.x == -1)
-    {
-        LOGE(TAG, "Find first failed");
-        return {};
-    }
-    
-    auto span = GroupUtilH61DX::getSpan(image, first);
-
     // 按颜色把相同颜色的相邻像素点归为一组
     auto redGroup = groupByColor(image, Vec3b(0, 0, 255), span);
     auto greenGroup = groupByColor(image, Vec3b(0, 255, 0), span);
@@ -242,7 +407,7 @@ std::vector<std::shared_ptr<GroupH61DX>> GroupUtilH61DX::group(cv::Mat &image)
             {
                 continue;
             }
-            if (distanceGroup(group, next) <= span)
+            if (blockCentersDistance(group, next) <= span * 2)
             {
                 group->addNext(next);
             }
@@ -339,11 +504,71 @@ int GroupUtilH61DX::getSpan(cv::Mat &image, const cv::Point &start)
     {
         allWidth.push_back(count);
     }
-    return max(3, getMedian(allWidth)/3*2);
+    return max(3, getMedian(allWidth));
+}
+
+void GroupH61DX::slicingBlock()
+{
+    auto count = max(2, (int)points.size() / max(1, blockWidth * blockWidth));
+    if (points.size() <= count) {
+        blockCenters = points;
+        return;
+    }
+    blockCenters = kmeansCluster(points, count);
+}
+
+cv::Point GroupH61DX::getClosestBlockCenter(const std::shared_ptr<GroupH61DX>& group)
+{
+    auto minDistance = INT_MAX;
+    auto minIndex = -1;
+    for (int i = 0; i < blockCenters.size(); i++)
+    {
+        for (auto &point : group->blockCenters) 
+        {
+            auto distance = distancePoint(blockCenters[i], point);
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                minIndex = i;
+            }
+        }
+    }
+    if (minIndex == -1)
+    {
+        return cv::Point(-1, -1);
+    }
+    return blockCenters[minIndex];
+}
+
+std::vector<cv::Point> GroupH61DX::getPathCenters(const std::shared_ptr<GroupH61DX>& fromGroup, const std::shared_ptr<GroupH61DX>& toGroup, int span)
+{
+    if (this->blockCenters.size() == 0)
+    {
+        return {};
+    }
+    
+    if (fromGroup && toGroup)
+    {
+        auto fromPoint = getClosestBlockCenter(fromGroup);
+        auto toPoint = getClosestBlockCenter(toGroup);
+        return getPointsCloseToLine(this->blockCenters, fromPoint, toPoint, span);
+    } else if (fromGroup)
+    {
+        auto fromPoint = getClosestBlockCenter(fromGroup);
+        auto toPoint = fromGroup->getClosestBlockCenter(this->getSharedPtr());
+        return getPointsCloseToLine(this->blockCenters, fromPoint, toPoint, span);
+    } else if (toGroup)
+    {
+        auto fromPoint = toGroup->getClosestBlockCenter(this->getSharedPtr());
+        auto toPoint = getClosestBlockCenter(toGroup);
+        return getPointsCloseToLine(this->blockCenters, fromPoint, toPoint, span);
+    }
+    return { this->blockCenters[0] };
 }
 
 #if DEBUG
-void GroupH61DX::debugPrint() {
+void GroupH61DX::debugPrint()
+{
     // 打印自己的所有点和nexts的所有点
     LOGD(TAG, "color: %c, points: %d, nexts: %d", this->debugChar(), points.size(), nexts.size());
     // 使用A打印自己所有点，next使用其debugChar打印其所有点，用占位符代替
@@ -351,35 +576,43 @@ void GroupH61DX::debugPrint() {
     auto allLines = std::vector<std::vector<char>>();
     auto width = 120;
     // 初始化alllines为全*
-    for (int i = 0; i < width; i++) {
+    for (int i = 0; i < width; i++)
+    {
         auto line = std::vector<char>(width, placeHolder);
         allLines.push_back(line);
     }
     // 以points[0]为中心点，开始打印
     auto left = points[0].x - 50;
     auto top = points[0].y - 50;
-    for (auto &point : points) {
+    for (auto &point : points)
+    {
         auto x = point.x - left;
         auto y = point.y - top;
-        if (x >= 0 && x < width && y >= 0 && y < width) {
+        if (x >= 0 && x < width && y >= 0 && y < width)
+        {
             allLines[y][x] = 'A';
         }
     }
     auto nexts = getNexts();
-    for (auto &next : nexts) {
+    for (auto &next : nexts)
+    {
         auto ps = next->points;
-        for (auto &point : ps) {
+        for (auto &point : ps)
+        {
             auto x = point.x - left;
             auto y = point.y - top;
-            if (x >= 0 && x < width && y >= 0 && y < width) {
+            if (x >= 0 && x < width && y >= 0 && y < width)
+            {
                 allLines[y][x] = next->debugChar();
             }
         }
     }
     // 将allLines添加换行符并打印出来
     auto line = std::string();
-    for (auto &l : allLines) {
-        for (auto &c : l) {
+    for (auto &l : allLines)
+    {
+        for (auto &c : l)
+        {
             line += c;
         }
         line += "\n";

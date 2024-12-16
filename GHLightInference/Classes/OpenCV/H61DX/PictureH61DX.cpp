@@ -24,7 +24,7 @@ cv::Mat PictureH61DX::processImage(cv::Mat& image)
     // 开运算2次
     Mat openedImage;
     morphologyEx(replacedImage, openedImage, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(3, 3)), Point(-1, -1), 2);
-    auto span = GroupUtilH61DX::getSpan(openedImage);
+    auto span = max(3, GroupUtilH61DX::getSpan(openedImage)/2);
     // 闭运算1次
     Mat closeImage;
     morphologyEx(openedImage, closeImage, MORPH_CLOSE, getStructuringElement(MORPH_RECT, Size(span, span)), Point(-1, -1), 1);
