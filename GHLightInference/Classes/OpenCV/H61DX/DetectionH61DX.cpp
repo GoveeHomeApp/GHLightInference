@@ -42,7 +42,7 @@ namespace {
                                 count++;
                             }
                         }
-                        if (count == 2) {
+                        if (count >= 2) {
                             startGroups.push_back(group);
                             break;
                         }
@@ -52,6 +52,21 @@ namespace {
         }
         return startGroups;
     }
+
+#if DEBUG
+    /// 将所有char连接起来一起打印，3个一个空格
+    void printGroupChars(std::vector<std::shared_ptr<GroupH61DX>>& groups) {
+        auto rgbSort = std::string();
+        for (size_t i = 0; i < groups.size(); ++i) {
+            auto &group = groups[i];
+            rgbSort += group->debugChar();
+            if (i % 3 == 2) {
+                rgbSort += " ";
+            }
+        }
+        cout << rgbSort << endl;
+    }
+#endif
 
     /// 统计不同实例数量的函数
     template<typename T>
@@ -65,28 +80,38 @@ namespace {
         return uniqueInstances.size();
     }
 
+    /// 比较两个分组，a是否比b好
+    bool compare(const vector<shared_ptr<GroupH61DX>>& a, const vector<shared_ptr<GroupH61DX>>& b) {
+        if (a.size() > b.size()) {
+            return true;
+        } else if (a.size() == b.size()) {
+            return count_unique_instances(a) > count_unique_instances(b);
+        }
+        return false;
+    }
+
     vector<shared_ptr<GroupH61DX>> sort(const shared_ptr<GroupH61DX>& group, const vector<int>& colors, int index = 0, vector<shared_ptr<GroupH61DX>> nowGroups = {}, const shared_ptr<GroupH61DX>& from = nullptr) {
         if (group == nullptr || index >= colors.size() || group->rgb != colors[index]) {
             return nowGroups;
         }
         nowGroups.push_back(group);
         auto result = nowGroups;
-        for (auto &next : group->getNexts()) {
-            if (from != nullptr && from == next) {
-                continue;
-            }
-            auto nextGroups = sort(next, colors, index + 1, nowGroups, group);
-            if (nextGroups.size() > result.size()) {
-                result = nextGroups;
-            } else if (nextGroups.size() == result.size()) {
-                auto nowCount = count_unique_instances(nextGroups);
-                auto resultCount = count_unique_instances(result);
-                if (nowCount > resultCount) {
+        if (index < colors.size() - 1)
+        {
+            auto nextColor = colors[index + 1];
+            auto nexts = group->pickNexts(nextColor, from);
+            for (auto &next : nexts) {
+                if (from != nullptr && from == next) 
+                {
+                    continue;
+                }
+                auto nextGroups = sort(next, colors, index + 1, nowGroups, group);
+                if (compare(nextGroups, result))
+                {
                     result = nextGroups;
                 }
             }
         }
-        
         return result;
     }
 
@@ -124,9 +149,9 @@ void DetectionH61DX::detection(cv::Mat originImage, std::function<void(std::vect
 std::vector<cv::Point> DetectionH61DX::debugDetection(cv::Mat originImage, std::function<void(std::vector<cv::Mat>)> callback)
 {
     cvtColor(originImage, _originImage, COLOR_RGBA2BGR);
-    _nowImage = PictureH61DX::processImage(_originImage);
-    callback({ _originImage, _nowImage });
-    
+    _nowImage = PictureH61DX::debugProcessImage(_originImage, [&callback](auto image){
+        callback({image});
+    });
     
     auto first = GroupUtilH61DX::findFirst(_nowImage);
     if (first.x == -1)
@@ -136,11 +161,18 @@ std::vector<cv::Point> DetectionH61DX::debugDetection(cv::Mat originImage, std::
     }
 
     auto span = GroupUtilH61DX::getSpan(_nowImage, first);
-    auto group = GroupUtilH61DX::group(_nowImage, span);
-    auto startGroups = getStartGroup(group);
+    LOGD(TAG, "---> Span: %d", span);
+
+    auto all = GroupUtilH61DX::group(_nowImage, span);
+    auto startGroups = getStartGroup(all);
     if (startGroups.size() == 0) {
         LOGE(TAG, "Start group is empty");
         return {};
+    }
+    
+    LOGD(TAG, "<<--------------------- all group --------------------->>");
+    for (auto &group : all) {
+        group->debugPrint();
     }
     
     // 找到group的rgb值与_detectionColors一致的序列
@@ -148,7 +180,8 @@ std::vector<cv::Point> DetectionH61DX::debugDetection(cv::Mat originImage, std::
     for (size_t i = 1; i < startGroups.size(); ++i)
     {
         auto groups = sort(startGroups[i], _detectionColors);
-        if (groups.size() > resutlGroups.size()) {
+        if (compare(groups, resutlGroups))
+        {
             resutlGroups = groups;
         }
     }
@@ -162,16 +195,7 @@ std::vector<cv::Point> DetectionH61DX::debugDetection(cv::Mat originImage, std::
     for (auto &group : resutlGroups) {
         group->debugPrint();
     }
-    // 将所有char连接起来一起打印，3个一个空格
-    auto rgbSort = std::string();
-    for (size_t i = 0; i < resutlGroups.size(); ++i) {
-        auto &group = resutlGroups[i];
-        rgbSort += group->debugChar();
-        if (i % 3 == 2) {
-            rgbSort += " ";
-        }
-    }
-    cout << rgbSort << endl;
+    printGroupChars(resutlGroups);
 
     auto centers = vector<cv::Point>();
     shared_ptr<GroupH61DX> last = nullptr;

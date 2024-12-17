@@ -26,6 +26,9 @@ public:
     /// @brief 分组被分割后的块数
     std::vector<cv::Point> blockCenters;
 
+    /// @brief 所有块数的平均中点
+    cv::Point allBlocksAvgCenter;
+
     GroupH61DX(cv::Vec3b color, std::vector<cv::Point> points, int span) :
     color(color),
     points(points),
@@ -45,6 +48,26 @@ public:
         nexts.push_back(next);
     }
 
+    /// @brief 检查并添加下一个分组
+    void checkAddNext(std::shared_ptr<GroupH61DX> next) {
+        for (auto& weak : nexts) {
+            if (weak.lock() == next) {
+                return;
+            }
+        }
+        addNext(next);
+    }
+
+    /// @brief 移除一个分组
+    void removeNext(std::shared_ptr<GroupH61DX> next) {
+        for (auto it = nexts.begin(); it != nexts.end(); it++) {
+            if (it->lock() == next) {
+                nexts.erase(it);
+                break;
+            }
+        }
+    }
+
     /// @brief 获取所有下一个分组
     std::vector<std::shared_ptr<GroupH61DX>> getNexts() {
         std::vector<std::shared_ptr<GroupH61DX>> nexts;
@@ -62,6 +85,15 @@ public:
 
     /// 获取连接路径中心点（从from分组开始，到to分组结束，默认为空）
     std::vector<cv::Point> getPathCenters(const std::shared_ptr<GroupH61DX>& fromGroup = nullptr, const std::shared_ptr<GroupH61DX>& toGroup = nullptr, int span = 3);
+    
+    /// 计算与group直接的距离
+    int distanceWithGroup(std::shared_ptr<GroupH61DX> group, bool useBlockCenter = true);
+    
+    /// 将other合并到当前分组
+    void merge(std::shared_ptr<GroupH61DX> other);
+
+    /// 根据选择下一个分组
+    std::vector<std::shared_ptr<GroupH61DX>> pickNexts(int rgb, std::shared_ptr<GroupH61DX> fromGroup = nullptr);
     
 #if DEBUG
     

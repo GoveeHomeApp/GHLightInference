@@ -117,6 +117,30 @@ namespace
         return values[values.size() / 2];
     }
 
+    /// 获取所有点的平均值
+    Point getAvgPoint(vector<Point> &values) {
+        if (values.empty()) {
+            return Point(0, 0);
+        }
+        int sumX = 0, sumY = 0;
+        for (auto &point : values) {
+            sumX += point.x;
+            sumY += point.y;
+        }
+        return Point(sumX / values.size(), sumY / values.size());
+    }
+
+    /// 求向量BC和AB之间的夹角（取劣角）
+    double getTargetPointAngle(Point B, Point C, Point A) 
+    {
+        // 因为Point是用(row, col)表示的，即(Y, X) 所以使用atan2(col, row)进行计算，即atan2(x, y)
+        double angle = abs(atan2(C.x - B.x, C.y - B.y) - atan2(A.x - B.x, A.y - B.y));
+        if (angle > CV_PI) {
+            angle = CV_2PI - angle;
+        }
+        return angle;
+    }
+
     /// 计算两点之间的距离，八个方向
     int distancePoint(Point a, Point b)
     {
@@ -164,19 +188,12 @@ namespace
     {
         a->points.insert(a->points.end(), b->points.begin(), b->points.end());
         a->blockCenters.insert(a->blockCenters.end(), b->blockCenters.begin(), b->blockCenters.end());
-        auto next = a->getNexts();
-        auto bNext = b->getNexts();
-        for (auto &nextGroup : bNext)
+        a->allBlocksAvgCenter = getAvgPoint(a->blockCenters);
+        a->removeNext(b);
+        for (auto &nextGroup : b->getNexts())
         {
-            auto needAdd = true;
-            for (auto &now : next) {
-                if (now == nextGroup) {
-                    needAdd = false;
-                }
-            }
-            if (needAdd) {
-                a->addNext(nextGroup);
-            }
+            a->checkAddNext(nextGroup);
+            nextGroup->checkAddNext(a);
         }
     }
 
@@ -276,10 +293,10 @@ namespace
             }
 
             // 合并less_groups中距离小于span的分组（先合并小的，不然分块太小会被忽略掉）(因为像素少，使用像素间比较)
-            mergeGroupsLessThanSpan(less_groups, span, false);
+            mergeGroupsLessThanSpan(less_groups, ceil(span * 1.5), false);
             greater_groups.insert(greater_groups.end(), less_groups.begin(), less_groups.end());
             // 合并总的greater_groups中距离小于span的分组（使用分块间比较）
-            mergeGroupsLessThanSpan(greater_groups, span * 2, true);
+//            mergeGroupsLessThanSpan(greater_groups, static_cast<int>(span * 2.2), true);
             groups = greater_groups;
         }
 
@@ -287,7 +304,7 @@ namespace
         for (auto &group : groups)
         {
             // 过滤点太少的，视为干扰（红绿相间会产生黄色）
-            if (group->points.size() < span * 2)
+            if (group->points.size() < span * 3)
             {
                 continue;
             }
@@ -407,7 +424,7 @@ std::vector<std::shared_ptr<GroupH61DX>> GroupUtilH61DX::group(cv::Mat &image, i
             {
                 continue;
             }
-            if (blockCentersDistance(group, next) <= span * 2)
+            if (blockCentersDistance(group, next) <= span * 2.5)
             {
                 group->addNext(next);
             }
@@ -515,6 +532,20 @@ void GroupH61DX::slicingBlock()
         return;
     }
     blockCenters = kmeansCluster(points, count);
+    allBlocksAvgCenter = getAvgPoint(blockCenters);
+}
+
+int GroupH61DX::distanceWithGroup(std::shared_ptr<GroupH61DX> group, bool useBlockCenter) {
+    if (useBlockCenter) {
+        return blockCentersDistance(getSharedPtr(), group);
+    }
+    return distanceGroup(getSharedPtr(), group);
+}
+
+/// 合并两个分组
+void GroupH61DX::merge(std::shared_ptr<GroupH61DX> other)
+{
+    mergeGroup(getSharedPtr(), other);
 }
 
 cv::Point GroupH61DX::getClosestBlockCenter(const std::shared_ptr<GroupH61DX>& group)
@@ -564,6 +595,38 @@ std::vector<cv::Point> GroupH61DX::getPathCenters(const std::shared_ptr<GroupH61
         return getPointsCloseToLine(this->blockCenters, fromPoint, toPoint, span);
     }
     return { this->blockCenters[0] };
+}
+
+std::vector<std::shared_ptr<GroupH61DX>> GroupH61DX::pickNexts(int rgb, std::shared_ptr<GroupH61DX> fromGroup) {
+    // 过滤出rgb相同的
+    auto sameRgb = std::vector<std::shared_ptr<GroupH61DX>>();
+    for (auto &next : nexts) {
+        auto nextLock = next.lock();
+        if (nextLock != fromGroup && nextLock->rgb == rgb) {
+            sameRgb.push_back(nextLock);
+        }
+    }
+    if (sameRgb.size() <= 1 || fromGroup == nullptr)
+    {
+        return sameRgb;
+    }
+    
+    // 找与直线同方向的
+    auto startPoint = fromGroup->allBlocksAvgCenter;
+    auto endPoint = this->allBlocksAvgCenter;
+    auto result = std::vector<std::shared_ptr<GroupH61DX>>();
+    for (auto &next : sameRgb) {
+        auto angle = getTargetPointAngle(startPoint, endPoint, next->allBlocksAvgCenter);
+        if (angle < CV_PI / 2)
+        {
+            result.push_back(next);
+        }
+    }
+    if (result.size() > 0)
+    {
+        return result;
+    }
+    return sameRgb;
 }
 
 #if DEBUG
