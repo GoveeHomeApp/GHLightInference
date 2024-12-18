@@ -26,8 +26,20 @@ public:
     /// @brief 分组被分割后的块数
     std::vector<cv::Point> blockCenters;
 
+    /// @brief 分组的边框点
+    std::vector<cv::Point> borderPoints;
+
     /// @brief 所有块数的平均中点
     cv::Point allBlocksAvgCenter;
+    
+    /// 分组标识
+    int tag;
+    
+    /// 最大穿过次数
+    int maxAcrossCount;
+    
+    /// 面积倍率（与中位数的倍数）
+    double areaRate;
 
     GroupH61DX(cv::Vec3b color, std::vector<cv::Point> points, int span) :
     color(color),
@@ -36,6 +48,7 @@ public:
     blockWidth(span)
     {
         this->slicingBlock();
+        this->calculateBorder();
     };
     
     std::shared_ptr<GroupH61DX> getSharedPtr() {
@@ -95,6 +108,9 @@ public:
     /// 根据选择下一个分组
     std::vector<std::shared_ptr<GroupH61DX>> pickNexts(int rgb, std::shared_ptr<GroupH61DX> fromGroup = nullptr);
     
+    /// 根据平均大小更新最大穿过次数
+    void updateMaxAcrossCount(int avgPointsCount);
+    
 #if DEBUG
     
     void debugPrint();
@@ -121,6 +137,9 @@ private:
     
     /// 对坐标进行分块
     void slicingBlock();
+
+    /// 计算边框
+    void calculateBorder();
 };
 
 

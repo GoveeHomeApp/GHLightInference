@@ -26,6 +26,30 @@ namespace H61DX {
     extern inline int BGR2Int(const cv::Vec3b &bgr) {
         return (bgr[2] << 16) | (bgr[1] << 8) | bgr[0];
     }
+
+    /// 将BGR转成HSV
+    extern inline std::vector<double> BGR2HSV(const cv::Vec3b &bgr) {
+        cv::Mat rgb_pixel(1, 1, CV_8UC3, bgr);
+        cv::Mat hsv_pixel;
+        cv::cvtColor(rgb_pixel, hsv_pixel, cv::COLOR_BGR2HSV);
+        
+        // 获取转换后的HSV值，并将H值从0-180扩展到0-360
+        double h = static_cast<double>(hsv_pixel.at<cv::Vec3b>(0, 0)[0]) * 2; // 扩展H值范围到0-360
+        double s = static_cast<double>(hsv_pixel.at<cv::Vec3b>(0, 0)[1]) / 255.0 * 100; // 归一化到0-100%
+        double v = static_cast<double>(hsv_pixel.at<cv::Vec3b>(0, 0)[2]) / 255.0 * 100; // 归一化到0-100%
+        return {h, s, v};
+    }
+
+    /// 将BGR转成LAB
+    extern inline std::vector<int> BGR2Lab(const cv::Vec3b &bgr) {
+        cv::Mat rgb_pixel(1, 1, CV_8UC3, bgr);
+        cv::Mat lab_pixel;
+        cv::cvtColor(rgb_pixel, lab_pixel, cv::COLOR_BGR2Lab);
+        int l = static_cast<int>(lab_pixel.at<cv::Vec3b>(0, 0)[0]);
+        int a = static_cast<int>(lab_pixel.at<cv::Vec3b>(0, 0)[1]) - 128;
+        int b = static_cast<int>(lab_pixel.at<cv::Vec3b>(0, 0)[2]) - 128;
+        return {l, a, b};
+    }
 }
 
 #endif // UtilH61DX_HPP

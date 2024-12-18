@@ -3,6 +3,8 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include "UtilH61DX.hpp"
+#include <unordered_map>
+#include <unordered_set>
 
 #if DEBUG
 #include <iostream>
@@ -118,27 +120,33 @@ namespace
     }
 
     /// 获取所有点的平均值
-    Point getAvgPoint(vector<Point> &values) {
-        if (values.empty()) {
+    Point getAvgPoint(vector<Point> &values)
+    {
+        if (values.empty())
+        {
             return Point(0, 0);
         }
         int sumX = 0, sumY = 0;
-        for (auto &point : values) {
+        for (auto &point : values)
+        {
             sumX += point.x;
             sumY += point.y;
         }
         return Point(sumX / values.size(), sumY / values.size());
     }
 
-    /// 求向量BC和AB之间的夹角（取劣角）
-    double getTargetPointAngle(Point B, Point C, Point A) 
+    /// 求向量AB和CD之间的夹角（取劣角）
+    double getLinesAngle(Point A, Point B, Point C, Point D)
     {
-        // 因为Point是用(row, col)表示的，即(Y, X) 所以使用atan2(col, row)进行计算，即atan2(x, y)
-        double angle = abs(atan2(C.x - B.x, C.y - B.y) - atan2(A.x - B.x, A.y - B.y));
-        if (angle > CV_PI) {
-            angle = CV_2PI - angle;
-        }
-        return angle;
+        auto ab = atan2(B.y - A.y, B.x - A.x);
+        auto cd = atan2(D.y - C.y, D.x - C.x);
+        return abs(ab - cd);
+    }
+
+    /// 求向量BC和AB之间的夹角（取劣角）
+    double getTargetPointAngle(Point A, Point B, Point C)
+    {
+        return getLinesAngle(A, B, B, C);
     }
 
     /// 计算两点之间的距离，八个方向
@@ -154,6 +162,24 @@ namespace
         for (auto &pointA : a->points)
         {
             for (auto &pointB : b->points)
+            {
+                int distance = distancePoint(pointA, pointB);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                }
+            }
+        }
+        return minDistance;
+    }
+
+    /// 计算两个分组之间的距离，取最小距离（以边框来计算）
+    int distanceBorderGroup(std::shared_ptr<Group> a, std::shared_ptr<Group> b)
+    {
+        int minDistance = INT_MAX;
+        for (auto &pointA : a->borderPoints)
+        {
+            for (auto &pointB : b->borderPoints)
             {
                 int distance = distancePoint(pointA, pointB);
                 if (distance < minDistance)
@@ -186,9 +212,12 @@ namespace
     /// 合并两个分组
     void mergeGroup(std::shared_ptr<Group> a, std::shared_ptr<Group> b)
     {
+        auto medianArea = static_cast<double>(a->points.size())/max(double(1), a->areaRate);
         a->points.insert(a->points.end(), b->points.begin(), b->points.end());
+        a->updateMaxAcrossCount(static_cast<int>(medianArea));
         a->blockCenters.insert(a->blockCenters.end(), b->blockCenters.begin(), b->blockCenters.end());
         a->allBlocksAvgCenter = getAvgPoint(a->blockCenters);
+        a->borderPoints.insert(a->borderPoints.end(), b->borderPoints.begin(), b->borderPoints.end());
         a->removeNext(b);
         for (auto &nextGroup : b->getNexts())
         {
@@ -197,18 +226,27 @@ namespace
         }
     }
 
-    void mergeGroupsLessThanSpan(vector<shared_ptr<Group>> &groups, int span, bool useBlockCenter = false) {
-        for (int i = 0; i < groups.size(); ++i) {
-            for (int j = i + 1; j < groups.size(); ++j) {
+    void mergeGroupsLessThanSpan(vector<shared_ptr<Group>> &groups, int span, bool useBlockCenter = false, int sizeLimit = -1)
+    {
+        for (int i = 0; i < groups.size(); ++i)
+        {
+            if (sizeLimit > 0 && groups[i]->points.size() >= sizeLimit)
+            {
+                continue;
+            }
+            for (int j = i + 1; j < groups.size(); ++j)
+            {
                 bool result = false;
                 if (useBlockCenter)
                 {
                     result = blockCentersDistance(groups[i], groups[j]) <= span;
-                } else
-                {
-                    result = distanceGroup(groups[i], groups[j]) <= span;
                 }
-                if (result) {
+                else
+                {
+                    result = distanceBorderGroup(groups[i], groups[j]) <= span;
+                }
+                if (result)
+                {
                     mergeGroup(groups[i], groups[j]);
                     groups.erase(groups.begin() + j);
                     --j;
@@ -282,6 +320,7 @@ namespace
             vector<shared_ptr<Group>> greater_groups;
             for (auto &group : groups)
             {
+                group->updateMaxAcrossCount(median_area);
                 if (group->points.size() < target_area)
                 {
                     less_groups.push_back(group);
@@ -295,8 +334,9 @@ namespace
             // 合并less_groups中距离小于span的分组（先合并小的，不然分块太小会被忽略掉）(因为像素少，使用像素间比较)
             mergeGroupsLessThanSpan(less_groups, ceil(span * 1.5), false);
             greater_groups.insert(greater_groups.end(), less_groups.begin(), less_groups.end());
-            // 合并总的greater_groups中距离小于span的分组（使用分块间比较）
-//            mergeGroupsLessThanSpan(greater_groups, static_cast<int>(span * 2.2), true);
+            // 合并总的greater_groups中面积较小的，距离小于span的分组（使用分块间比较）
+//            mergeGroupsLessThanSpan(greater_groups, static_cast<int>(span * 2.2), true, median_area * 0.8);
+            mergeGroupsLessThanSpan(greater_groups, static_cast<int>(span * 1.5), false, median_area * 0.8);
             groups = greater_groups;
         }
 
@@ -375,7 +415,7 @@ namespace
         {
             return sqrt(pow(p.x - p1.x, 2) + pow(p.y - p1.y, 2));
         }
-        
+
         float a = p2.y - p1.y;
         float b = p1.x - p2.x;
         float c = p2.x * p1.y - p1.x * p2.y;
@@ -383,7 +423,8 @@ namespace
     }
 
     /// 获取距离直线距离小于阈值的点
-    vector<Point> getPointsCloseToLine(vector<Point> points, Point p1, Point p2, float distanceThreshold) {
+    vector<Point> getPointsCloseToLine(vector<Point> points, Point p1, Point p2, float distanceThreshold)
+    {
         vector<Point> result;
         for (const auto &point : points)
         {
@@ -393,9 +434,8 @@ namespace
             }
         }
         // 将result排序
-        std::sort(result.begin(), result.end(), [&](const Point &a, const Point &b) {
-            return distancePoint(a, p1) < distancePoint(b, p1);
-        });
+        std::sort(result.begin(), result.end(), [&](const Point &a, const Point &b)
+                  { return distancePoint(a, p1) < distancePoint(b, p1); });
         return result;
     }
 }
@@ -416,19 +456,22 @@ std::vector<std::shared_ptr<GroupH61DX>> GroupUtilH61DX::group(cv::Mat &image, i
     allGroups.insert(allGroups.end(), yellowGroup.begin(), yellowGroup.end());
 
     // 检查所有分组之间的距离，若小于等于span，如果有则添加到nexts中
+    int index = 0;
     for (auto &group : allGroups)
     {
+        group->tag = index;
         for (auto &next : allGroups)
         {
             if (group == next)
             {
                 continue;
             }
-            if (blockCentersDistance(group, next) <= span * 2.5)
+            if (distanceBorderGroup(group, next) <= span * 1.5)
             {
                 group->addNext(next);
             }
         }
+        index++;
     }
 
     return allGroups;
@@ -527,7 +570,8 @@ int GroupUtilH61DX::getSpan(cv::Mat &image, const cv::Point &start)
 void GroupH61DX::slicingBlock()
 {
     auto count = max(2, (int)points.size() / max(1, blockWidth * blockWidth));
-    if (points.size() <= count) {
+    if (points.size() <= count)
+    {
         blockCenters = points;
         return;
     }
@@ -535,11 +579,45 @@ void GroupH61DX::slicingBlock()
     allBlocksAvgCenter = getAvgPoint(blockCenters);
 }
 
-int GroupH61DX::distanceWithGroup(std::shared_ptr<GroupH61DX> group, bool useBlockCenter) {
-    if (useBlockCenter) {
+void GroupH61DX::calculateBorder()
+{
+    struct PointHash
+    {
+        std::size_t operator()(const cv::Point &p) const
+        {
+            return std::hash<int>()(p.x) ^ (std::hash<int>()(p.y) << 1);
+        }
+    };
+    auto border = std::vector<cv::Point>();
+    std::unordered_set<cv::Point, PointHash> borderSet(points.begin(), points.end());
+    for (auto &point : points)
+    {
+        // 查看上下左右是否都有元素，若不是则加入
+        auto up = cv::Point(point.x, point.y - 1);
+        auto down = cv::Point(point.x, point.y + 1);
+        auto left = cv::Point(point.x - 1, point.y);
+        auto right = cv::Point(point.x + 1, point.y);
+        if (borderSet.find(up) == borderSet.end() || borderSet.find(down) == borderSet.end() || borderSet.find(left) == borderSet.end() || borderSet.find(right) == borderSet.end())
+        {
+            border.push_back(point);
+        }
+    }
+    borderPoints = vector<cv::Point>(border.begin(), border.end());
+}
+
+void GroupH61DX::updateMaxAcrossCount(int avgPointsCount)
+{
+    maxAcrossCount = static_cast<int>(points.size()) / avgPointsCount + 1;
+    areaRate = static_cast<double>(points.size())/static_cast<double>(avgPointsCount);
+}
+
+int GroupH61DX::distanceWithGroup(std::shared_ptr<GroupH61DX> group, bool useBlockCenter)
+{
+    if (useBlockCenter)
+    {
         return blockCentersDistance(getSharedPtr(), group);
     }
-    return distanceGroup(getSharedPtr(), group);
+    return distanceBorderGroup(getSharedPtr(), group);
 }
 
 /// 合并两个分组
@@ -548,13 +626,13 @@ void GroupH61DX::merge(std::shared_ptr<GroupH61DX> other)
     mergeGroup(getSharedPtr(), other);
 }
 
-cv::Point GroupH61DX::getClosestBlockCenter(const std::shared_ptr<GroupH61DX>& group)
+cv::Point GroupH61DX::getClosestBlockCenter(const std::shared_ptr<GroupH61DX> &group)
 {
     auto minDistance = INT_MAX;
     auto minIndex = -1;
     for (int i = 0; i < blockCenters.size(); i++)
     {
-        for (auto &point : group->blockCenters) 
+        for (auto &point : group->blockCenters)
         {
             auto distance = distancePoint(blockCenters[i], point);
             if (distance < minDistance)
@@ -571,38 +649,43 @@ cv::Point GroupH61DX::getClosestBlockCenter(const std::shared_ptr<GroupH61DX>& g
     return blockCenters[minIndex];
 }
 
-std::vector<cv::Point> GroupH61DX::getPathCenters(const std::shared_ptr<GroupH61DX>& fromGroup, const std::shared_ptr<GroupH61DX>& toGroup, int span)
+std::vector<cv::Point> GroupH61DX::getPathCenters(const std::shared_ptr<GroupH61DX> &fromGroup, const std::shared_ptr<GroupH61DX> &toGroup, int span)
 {
     if (this->blockCenters.size() == 0)
     {
         return {};
     }
-    
+
     if (fromGroup && toGroup)
     {
         auto fromPoint = getClosestBlockCenter(fromGroup);
         auto toPoint = getClosestBlockCenter(toGroup);
         return getPointsCloseToLine(this->blockCenters, fromPoint, toPoint, span);
-    } else if (fromGroup)
+    }
+    else if (fromGroup)
     {
         auto fromPoint = getClosestBlockCenter(fromGroup);
         auto toPoint = fromGroup->getClosestBlockCenter(this->getSharedPtr());
         return getPointsCloseToLine(this->blockCenters, fromPoint, toPoint, span);
-    } else if (toGroup)
+    }
+    else if (toGroup)
     {
         auto fromPoint = toGroup->getClosestBlockCenter(this->getSharedPtr());
         auto toPoint = getClosestBlockCenter(toGroup);
         return getPointsCloseToLine(this->blockCenters, fromPoint, toPoint, span);
     }
-    return { this->blockCenters[0] };
+    return {this->blockCenters[0]};
 }
 
-std::vector<std::shared_ptr<GroupH61DX>> GroupH61DX::pickNexts(int rgb, std::shared_ptr<GroupH61DX> fromGroup) {
+std::vector<std::shared_ptr<GroupH61DX>> GroupH61DX::pickNexts(int rgb, std::shared_ptr<GroupH61DX> fromGroup)
+{
     // 过滤出rgb相同的
     auto sameRgb = std::vector<std::shared_ptr<GroupH61DX>>();
-    for (auto &next : nexts) {
+    for (auto &next : nexts)
+    {
         auto nextLock = next.lock();
-        if (nextLock != fromGroup && nextLock->rgb == rgb) {
+        if (nextLock != fromGroup && nextLock->rgb == rgb)
+        {
             sameRgb.push_back(nextLock);
         }
     }
@@ -610,30 +693,78 @@ std::vector<std::shared_ptr<GroupH61DX>> GroupH61DX::pickNexts(int rgb, std::sha
     {
         return sameRgb;
     }
-    
+
     // 找与直线同方向的
     auto startPoint = fromGroup->allBlocksAvgCenter;
     auto endPoint = this->allBlocksAvgCenter;
     auto result = std::vector<std::shared_ptr<GroupH61DX>>();
-    for (auto &next : sameRgb) {
+    for (auto &next : sameRgb)
+    {
         auto angle = getTargetPointAngle(startPoint, endPoint, next->allBlocksAvgCenter);
-        if (angle < CV_PI / 2)
+        if (angle < CV_PI / 4)
         {
             result.push_back(next);
         }
     }
-    if (result.size() > 0)
+    if (result.size() > 1 && this->blockCenters.size() > 1)
     {
-        return result;
+        // 如果有多个结果，当前最末尾分块的两个分块心点，和目标任意当前的两个分块中心进行角度比较，取小的那一个
+        auto a = this->blockCenters[0];
+        auto b = this->blockCenters[1];
+        auto nowPoints = getPointsCloseToLine(this->blockCenters, startPoint, endPoint, 10);
+        if (nowPoints.size() > 1)
+        {
+            // 如果是大面积的分组（即多段重叠的），取前面两个
+            if (areaRate > 1.2) {
+                a = nowPoints[0];
+                b = nowPoints[1];
+            } else {
+                a = nowPoints[nowPoints.size() - 2];
+                b = nowPoints[nowPoints.size() - 1];
+            }
+        }
+        double minAngle = DBL_MAX;
+        shared_ptr<GroupH61DX> target = nullptr;
+        for (auto &next : result)
+        {
+            auto blocks = next->blockCenters;
+            if (blocks.size() > 1)
+            {
+                // 对blocks排序，取最近b点的两个
+                std::sort(blocks.begin(), blocks.end(), [&](const Point &t1, const Point &t2)
+                          { return distancePoint(t1, b) < distancePoint(t2, b); });
+                auto c = blocks[0];
+                auto d = blocks[1];
+                auto angle = getLinesAngle(a, b, c, d);
+                if (angle < minAngle)
+                {
+                    minAngle = angle;
+                    target = next;
+                }
+            } 
+            else if (blocks.size() == 1)
+            {
+                auto angle = getTargetPointAngle(a, b, blocks[0]);
+                if (angle < minAngle)
+                {
+                    minAngle = angle;
+                    target = next;
+                }
+            }
+        }
+        if (target != nullptr)
+        {
+            return {target};
+        }
     }
-    return sameRgb;
+    return result;
 }
 
 #if DEBUG
 void GroupH61DX::debugPrint()
 {
     // 打印自己的所有点和nexts的所有点
-    LOGD(TAG, "color: %c, points: %d, nexts: %d", this->debugChar(), points.size(), nexts.size());
+    LOGD(TAG, "color: %c, points: %d, nexts: %d, tag: %d", this->debugChar(), points.size(), nexts.size(), tag);
     // 使用A打印自己所有点，next使用其debugChar打印其所有点，用占位符代替
     const char placeHolder = ' ';
     auto allLines = std::vector<std::vector<char>>();

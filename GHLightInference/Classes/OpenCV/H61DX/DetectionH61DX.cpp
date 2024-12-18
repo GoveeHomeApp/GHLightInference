@@ -6,12 +6,22 @@
 #include "PictureH61DX.hpp"
 #include "GroupUtilH61DX.hpp"
 #include <unordered_set>
+#include <unordered_map>
 
 using namespace cv;
 using namespace std;
 using namespace H61DX;
 
 namespace {
+    /// 获取所有分组的标识
+    vector<int> getGroupTags(vector<shared_ptr<GroupH61DX>>& groups) {
+        vector<int> tags;
+        for (auto &group : groups) {
+            tags.push_back(group->tag);
+        }
+        return tags;
+    }
+
     /// 获取开始的可能分组
     vector<shared_ptr<GroupH61DX>> getStartGroup(vector<shared_ptr<GroupH61DX>> groups) {
         vector<shared_ptr<GroupH61DX>> startGroups;
@@ -68,6 +78,26 @@ namespace {
     }
 #endif
 
+    int checkAcrossCount(std::unordered_map<int, int>& across, const shared_ptr<GroupH61DX>& group)
+    {
+        auto value = across.find(group->tag);
+        if (value != across.end()) {
+            return value->second;
+        }
+        return 0;
+    }
+
+    bool isCanAcrossGroup(std::unordered_map<int, int>& across, const shared_ptr<GroupH61DX>& group)
+    {
+        auto max = group->maxAcrossCount;
+        auto count = checkAcrossCount(across, group);
+        return count < max;
+    }
+    
+    void acrossGroup(std::unordered_map<int, int>& across, const shared_ptr<GroupH61DX>& group) {
+        across[group->tag] = checkAcrossCount(across, group) + 1;
+    }
+
     /// 统计不同实例数量的函数
     template<typename T>
     size_t count_unique_instances(const std::vector<std::shared_ptr<T>>& vec) {
@@ -90,22 +120,38 @@ namespace {
         return false;
     }
 
-    vector<shared_ptr<GroupH61DX>> sort(const shared_ptr<GroupH61DX>& group, const vector<int>& colors, int index = 0, vector<shared_ptr<GroupH61DX>> nowGroups = {}, const shared_ptr<GroupH61DX>& from = nullptr) {
+    vector<shared_ptr<GroupH61DX>> sort(const shared_ptr<GroupH61DX>& group, 
+                                        const vector<int>& colors,
+                                        int index = 0,
+                                        vector<shared_ptr<GroupH61DX>> nowGroups = {},
+                                        const shared_ptr<GroupH61DX>& from = nullptr,
+                                        std::unordered_map<int, int> across = {}) {
         if (group == nullptr || index >= colors.size() || group->rgb != colors[index]) {
             return nowGroups;
         }
         nowGroups.push_back(group);
+        acrossGroup(across, group);
+
+        #if DEBUG
+            printGroupChars(nowGroups);
+            auto tags = getGroupTags(nowGroups);
+            for (auto &tag : tags) {
+                printf("%d ", tag);
+            }
+            printf("\n");
+        #endif
+
         auto result = nowGroups;
         if (index < colors.size() - 1)
         {
             auto nextColor = colors[index + 1];
             auto nexts = group->pickNexts(nextColor, from);
             for (auto &next : nexts) {
-                if (from != nullptr && from == next) 
+                if (from != nullptr && from == next && isCanAcrossGroup(across, group)) 
                 {
                     continue;
                 }
-                auto nextGroups = sort(next, colors, index + 1, nowGroups, group);
+                auto nextGroups = sort(next, colors, index + 1, nowGroups, group, across);
                 if (compare(nextGroups, result))
                 {
                     result = nextGroups;
