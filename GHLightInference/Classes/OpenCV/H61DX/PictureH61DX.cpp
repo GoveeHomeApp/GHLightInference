@@ -49,17 +49,21 @@ cv::Mat PictureH61DX::debugProcessImage(cv::Mat &image, std::function<void(cv::M
 
     // 对原图进行掩膜操作
     Mat brightnessImage;
-    bitwise_and(image, image, brightnessImage, mask);
+    bitwise_and(resizedImage, resizedImage, brightnessImage, mask);
     callback(brightnessImage);
 
     auto span = max(3, GroupUtilH61DX::getSpan(brightnessImage));
     if (span > 3)
     {
-        // 进行开闭运算
-        morphologyEx(mask, mask, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(3, 3)), Point(-1, -1), 2);
+        // 去除毛刺
+        morphologyEx(mask, mask, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(3, 3)));
         morphologyEx(mask, mask, MORPH_CLOSE, getStructuringElement(MORPH_RECT, Size(3, 3)));
-        bitwise_and(image, image, brightnessImage, mask);
-        callback(brightnessImage);
+        morphologyEx(mask, mask, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(3, 3)));
+        morphologyEx(mask, mask, MORPH_CLOSE, getStructuringElement(MORPH_RECT, Size(3, 3)));
+        Mat targetImage;
+        bitwise_and(resizedImage, resizedImage, targetImage, mask);
+        brightnessImage = targetImage;
+        callback(targetImage);
     }
 
     // 提纯颜色

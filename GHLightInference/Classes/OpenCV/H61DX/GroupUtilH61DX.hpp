@@ -40,6 +40,9 @@ public:
     
     /// 面积倍率（与中位数的倍数）
     double areaRate;
+    
+    /// 是否为单段灯带
+    bool isSingleSegment;
 
     GroupH61DX(cv::Vec3b color, std::vector<cv::Point> points, int span) :
     color(color),
@@ -49,6 +52,7 @@ public:
     {
         this->slicingBlock();
         this->calculateBorder();
+        this->updateIsSingleSegment();
     };
     
     std::shared_ptr<GroupH61DX> getSharedPtr() {
@@ -110,6 +114,9 @@ public:
     
     /// 根据平均大小更新最大穿过次数
     void updateMaxAcrossCount(int avgPointsCount);
+    
+    /// 刷新是否是单分段
+    void updateIsSingleSegment();
     
 #if DEBUG
     
