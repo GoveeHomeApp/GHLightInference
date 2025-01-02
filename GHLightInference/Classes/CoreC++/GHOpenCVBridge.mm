@@ -139,7 +139,7 @@ vector<LightPoint> resLp;
             LightPoint ltp = LightPoint();
             ltp.tfScore = obj.score;
             Rect_<int> rect((int)obj.x, (int)obj.y, (int)obj.width, (int)obj.height);
-            if ((int)bizType == TYPE_H682X) {
+            if ((int)bizType == 2) {
                 ltp.with = rect.width;
                 ltp.height = rect.height;
             } else {
@@ -288,6 +288,10 @@ void releaseAll() {
     emptyMats.clear();
     resLp.clear();
     resLp.shrink_to_fit();
+}
+
+- (void)releaseOutProcess {
+    releaseAll();
 }
 
 

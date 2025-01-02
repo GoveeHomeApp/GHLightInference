@@ -219,21 +219,13 @@ public:
 
 };
 
-RotatedRect fitRotatedRect(const vector<LightBead> &beads);
-
-double calculateLightBarConfidence(const LightBar &bar);
-
-vector<LightBar> clusterBeadsIntoLightBars(const vector<LightBead> &beads);
-
-bool isBeadAligned(const vector<LightBead> &bar, const LightBead &bead);
 
 /**
  * 根据轮廓识别点位
  */
 void
-findByContours(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lightPoints, int icNum,
+findByContours(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lightPoints,
                vector<Mat> &outMats);
-
 
 void findNoodleLamp(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lightPoints,
                     vector<Mat> &outMats);
@@ -249,10 +241,6 @@ Mat morphologyImage(Mat &image, int openKernelSize, int dilateKernelSize, int sh
 Mat thresholdNoodleLamp(Mat &src, vector<LightPoint> &lightPoints,
                         vector<Mat> &outMats);
 
-std::vector<std::vector<cv::Point>>
-removeLargeContours(const std::vector<std::vector<cv::Point>> &contours, double threshold = 2.5,
-                    size_t minContourCount = 6);
-
 /**
  * 轮廓大到小排序
  */
@@ -261,11 +249,7 @@ bool compareContourAreas(vector<cv::Point> contour1, vector<cv::Point> contour2)
 /**
  * 二值化得出点位
  */
-Mat thresholdPoints(Mat &src, Mat &bgrSrc, Mat &hue, int color, vector<Mat> &outMats);
-
-void polyContours(vector<cv::Point> &pointVector, vector<ContourInfo> &groups, int k,
-                  double stddevThreshold);
-
+Mat thresholdPoints(Mat &src,  Mat &hue, vector<Mat> &outMats);
 /**
  * 离群点检测
  */

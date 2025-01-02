@@ -57,7 +57,7 @@ vector<Group> groupLightPoints(const vector<LightPoint> &lightPoints);
  * 根据相邻位置关系找出离群点
  */
 void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPoints,
-                         float avgDistance);
+                         float avgDistance, int diff = 4);
 
 bool canBelievePrePre(const vector<LightPoint> &points, int i, double avgDistance);
 

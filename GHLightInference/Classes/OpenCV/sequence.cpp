@@ -1,10 +1,13 @@
 #include <iostream>
 #include <map>
 #include "sequence.hpp"
-
-const int red = -65536;
-const int green = -16711936;
+//red: -65536  -3670016
+//green: -16711936  -16726016
+//blue: -16776961  -16777016
+const int red = -65536;//200  -3670016
+const int green = -16711936;//-16726016
 const int blue = -16776961;
+const int empty = -16711423;
 const vector<int> numbers = {red, green, blue};
 vector<PointIndex> listResult;
 map<int, int> icRatioMap;
@@ -21,7 +24,7 @@ int initVector(int icNum) {
         return getMaxStepCnt();
     }
     icNumber = icNum;
-    LOGW(LOG_TAG, "initVector icNumber=%d", icNumber);
+    LOGE(LOG_TAG, "initVector version=1.0.1 icNumber=%d", icNumber);
     int vector1[] = {1, 2};
     int vector2[] = {3, 5};
     int vector3[] = {6, 10};
@@ -210,7 +213,7 @@ vector<vector<int>> getColors(int frameStep) {
         }
     } else {
         for (int index = 0; index < icNumber; index++) {
-            if (index % 2 == 0) {
+            if (index % 2 == 0) {//偶数按序号投入
                 if (cntOddIndex > indexList.size()) {
                     LOGE(LOG_TAG, "cntOddIndex > indexList,  cntOddIndex=%d,  index=%d",
                          cntOddIndex,
@@ -227,7 +230,7 @@ vector<vector<int>> getColors(int frameStep) {
                 colorMap.push_back({index, numbers[colorIndex]});
                 cntOddIndex++;
             } else {
-                if (cntEvenIndex < 2) {
+                if (cntEvenIndex < 2) {//投入0
                     colorMap.push_back({index, numbers[cntEvenIndex]});
                 } else {
                     //2 3
@@ -240,10 +243,11 @@ vector<vector<int>> getColors(int frameStep) {
                              index, colorIndex, frameStep, offset, indexList.size());
                         continue;
                     }
+//                    colorMap.push_back({index, blue});
                     colorMap.push_back({index, numbers[colorIndex]});
                 }
                 cntEvenIndex++;
-                if (cntEvenIndex == 5) {
+                if (cntEvenIndex == 12) {
                     cntEvenIndex = 0;
                 }
             }
@@ -262,22 +266,14 @@ vector<vector<int>> getColors(int frameStep) {
  */
 int getNonSequenceType(int inferredLightIndex, int lightType) {
     try {
-        if (lightType == TYPE_H682X) {
-            int greenRet = greenMap[inferredLightIndex];
-            if (greenRet == -1) {
-                LOGE(LOG_TAG, "非推断序号");
-                return -1;
-            }
-            return greenRet;
-        } else {
-            if (inferredLightIndex % 2 == 0 || inferredLightIndex < 1) {
+
+        if (inferredLightIndex % 2 == 0 || inferredLightIndex < 1) {
 //                LOGE(LOG_TAG, "getNonSequenceType 无效输入=%d", inferredLightIndex);
-                return -1; // 无效输入
-            }
-            //labels[]
-            return ((inferredLightIndex + 1) / 2 - 1) % 5;
-//            return ((inferredLightIndex + 1) / 2 - 1) % 4;
+            return -1; // 无效输入
         }
+        //labels[]
+        return ((inferredLightIndex + 1) / 2 - 1) % 12;
+
     } catch (...) {
         LOGE(LOG_TAG, "getNonSequenceType error");
         return -1;

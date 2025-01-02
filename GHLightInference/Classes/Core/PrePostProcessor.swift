@@ -139,7 +139,7 @@ public class PrePostProcessor : NSObject {
                 
                 var max = Double(truncating: outputs[i*outputColumn+5])
                 var cls = 0
-                for j in 0 ..< outputColumn-5 {   
+                for j in 0 ..< outputColumn-5 {
                     if Double(truncating: outputs[i*outputColumn+5+j]) > max {
                         max = Double(truncating: outputs[i*outputColumn+5+j])
                         cls = j
@@ -153,6 +153,38 @@ public class PrePostProcessor : NSObject {
                 if score > 0.1 {
                     predictions.append(prediction)
                 }
+            }
+        }
+
+        return nonMaxSuppression(boxes: predictions, limit: nmsLimit, threshold: threshold)
+    }
+    
+    public func originOutputsToNMSPredictions(outputs: [NSNumber], imgScaleX: Double, imgScaleY: Double, ivScaleX: Double, ivScaleY: Double, startX: Double, startY: Double) -> [Prediction] {
+        var predictions = [Prediction]()
+        for i in 0..<outputRow {
+            if Float(truncating: outputs[i*outputColumn+4]) > threshold {
+                let x = Double(truncating: outputs[i*outputColumn])
+                let y = Double(truncating: outputs[i*outputColumn+1])
+                let w = Double(truncating: outputs[i*outputColumn+2])
+                let h = Double(truncating: outputs[i*outputColumn+3])
+                
+                let left = imgScaleX * (x - w/2)
+                let top = imgScaleY * (y - h/2)
+                let right = imgScaleX * (x + w/2)
+                let bottom = imgScaleY * (y + h/2)
+                
+                var max = Double(truncating: outputs[i*outputColumn+5])
+                var cls = 0
+                for j in 0 ..< outputColumn-5 {
+                    if Double(truncating: outputs[i*outputColumn+5+j]) > max {
+                        max = Double(truncating: outputs[i*outputColumn+5+j])
+                        cls = j
+                    }
+                }
+
+                let rect = CGRect(x: startX+ivScaleX*left, y: startY+top*ivScaleY, width: ivScaleX*(right-left), height: ivScaleY*(bottom-top))
+                let prediction = Prediction(classIndex: cls, score: Float(truncating: outputs[i*outputColumn+4]), rect: rect, x: Int(x), y: Int(y), w: Int(w), h: Int(h))
+                predictions.append(prediction)
             }
         }
 
@@ -195,26 +227,70 @@ public class PrePostProcessor : NSObject {
                 if pred.score > 0.20 {
                     imageView.addSubview(bbox)
                 }
-            case "blue":
-                break
-            case "light":
-                let bbox = UIView(frame: pred.rect)
-                bbox.backgroundColor = UIColor.clear
-                bbox.layer.borderColor = UIColor.purple.cgColor
-                bbox.layer.borderWidth = 1
-                let bbox1 = CrossDiagonalView(frame: pred.rect)
-                bbox1.backgroundColor = UIColor.clear
-                bbox1.layoutIfNeeded()
-                // 如何准确绘制 识别后标底
-                if pred.score > 0.2 {
-                    imageView.addSubview(bbox)
-                    imageView.addSubview(bbox1)
-                }
-                break
             default:
                 break
             }
         }
+    }
+    
+    public func showPreDetection(view: UIView, nmsPredictions: [Prediction], classes: [String], _ isHori: Bool = false, _ minus: CGFloat = 0.00) {
+        debugPrint("log.p Total object \(nmsPredictions.count)")
+        debugPrint("log.p view frame is \(view.frame)")
+        let oriWidth = view.frame.size.width
+        let oriHeight = view.frame.size.height
+        print("log.p ===== minus \(minus)")
+        view.subviews.map { $0.removeFromSuperview() }
+        for pred in nmsPredictions {
+            let index = classes[pred.classIndex]
+            switch index {
+            case "red":
+                let bbox = UIView(frame: pred.rect)
+                if isHori {
+                    // 横屏坐标转换 注意x要乘以放缩比例
+                    let transFrame = self.transferFrameToHori(view: view, origin: pred.rect, minus)
+                    bbox.frame = CGRect(x: transFrame.origin.x, y: transFrame.origin.y, width: 10, height: 10)
+                } else {
+                    bbox.frame = CGRect(x: pred.rect.origin.x, y: pred.rect.origin.y, width: 10, height: 10)
+                }
+                bbox.backgroundColor = UIColor.blue.withAlphaComponent(0.8)
+                bbox.layer.cornerRadius = 5
+                bbox.layer.masksToBounds = true
+                if pred.score > 0.20 {
+                    view.addSubview(bbox)
+                }
+            case "green":
+                let bbox = UIView(frame: pred.rect)
+                if isHori {
+                    // 横屏坐标转换 这个地方的位置要乘以宽高变换比例
+                    let transFrame = self.transferFrameToHori(view: view, origin: pred.rect, minus)
+                    bbox.frame = CGRect(x: transFrame.origin.x, y: transFrame.origin.y, width: 10, height: 10)
+                } else {
+                    bbox.frame = CGRect(x: pred.rect.origin.x, y: pred.rect.origin.y, width: 10, height: 10)
+                }
+                bbox.backgroundColor = UIColor.blue.withAlphaComponent(0.8)
+                bbox.layer.cornerRadius = 5
+                bbox.layer.masksToBounds = true
+                if pred.score > 0.20 {
+                    view.addSubview(bbox)
+                }
+            default:
+                break
+            }
+        }
+        view.clipsToBounds = true
+    }
+    
+    public func transferFrameToHori(view: UIView, origin: CGRect, _ minus: CGFloat = 0.0) -> CGRect {
+        var result = CGRect.zero
+        let oriWidth = view.frame.size.width
+        let oriHeight = view.frame.size.height
+        let originX = origin.origin.y*oriHeight/oriWidth + (view.frame.origin.x*oriHeight/oriWidth) - minus
+        var originY = origin.origin.x*oriHeight/oriWidth
+        let backCenterY = view.frame.size.height/2
+        // 横竖正确，需要沿页面中心X轴镜像翻转
+        originY = abs(originY-2*backCenterY) - minus
+        result = CGRect(x: originX, y: originY, width: origin.size.height, height: origin.size.width)
+        return result
     }
 
 }

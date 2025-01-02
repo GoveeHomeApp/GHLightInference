@@ -26,7 +26,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
                            float avgDistance,
                            int neighborCount = 2) {
     if (samePoints.empty()) {
-        return LightPoint(EMPTY_POINT);
+        return {EMPTY_POINT};
     }
 
     int targetSerial = samePoints[0].label;
@@ -48,8 +48,6 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
         for (int i = 0; i < neighborCount && it + i != totalPoints.end(); ++i) {
             nextPoints.push_back(*(it + i));
         }
-
-
         float minDeviation = numeric_limits<float>::max();
 
         for (const auto &point: samePoints) {
@@ -89,7 +87,7 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
         for (const auto &point: samePoints) {
             if (point.label != bestPoint.label || point.position != bestPoint.position) {
                 errorPoints.push_back(point);
-                LOGE(LOG_TAG, "---塞入异常点位 label =%d position = %f - %f", point.label,
+                LOGW(LOG_TAG, "---塞入异常点位 label =%d position = %f - %f", point.label,
                      point.position.x,
                      point.position.y);
                 circle(src, point.position, 6, Scalar(0, 0, 255), 2);
@@ -111,13 +109,13 @@ LightPoint selectBestPoint(Mat &src, const vector<LightPoint> &totalPoints,
 void
 processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoints,
                   vector<LightPoint> &errorPoints,
-                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap,
-                  int lightType) {
+                  float avgDistance, const map<int, vector<LightPoint>> sameSerialNumMap) {
     try {
         Mat outMat = src.clone();
         for (const auto &entry: sameSerialNumMap) {
             vector<LightPoint> indices = entry.second;
             if (indices.size() > 1) {
+                LOGW(LOG_TAG, "---处理同序号点位 label =%d", entry.first);
                 sort(totalPoints.begin(), totalPoints.end(),
                      [](const LightPoint &a, const LightPoint &b) { return a.label < b.label; });
 
@@ -128,16 +126,17 @@ processSamePoints(Mat &src, vector<Mat> &outMats, vector<LightPoint> &totalPoint
                          bestPoint.position.x,
                          bestPoint.position.y);
                     circle(outMat, bestPoint.position, 6, Scalar(0, 255, 0), 2);
-                    putText(outMat, to_string(bestPoint.label), bestPoint.position,
+                    putText(outMat, to_string(entry.first), bestPoint.position,
                             FONT_HERSHEY_SIMPLEX, 0.7,
                             Scalar(0, 255, 0), 1);
                     totalPoints.push_back(bestPoint);
                 }
             }
         }
-        if (lightType != TYPE_H682X) {
-            outMats.push_back(outMat);
-        }
+        putText(outMat, "processSamePoints", Point(50, 50), FONT_HERSHEY_SIMPLEX, 0.7,
+                Scalar(255, 0, 50), 2);
+        outMat.release();//todo: linpeng
+//        outMats.push_back(outMat);
     } catch (...) {
         LOGE(LOG_TAG, "processSamePoints error");
     }

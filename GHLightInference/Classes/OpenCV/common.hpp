@@ -36,7 +36,6 @@ enum LIGHT_STATUS {
 enum LIGHT_TYPE {
     TYPE_H70CX_3D = 0,
     TYPE_H70CX_2D = 1,
-    TYPE_H682X = 2,
 };
 
 enum FIND_TYPE {
@@ -45,14 +44,40 @@ enum FIND_TYPE {
     TYPE_ERROR = 2,
 };
 
+class TfPoint {
+public:
+    ~TfPoint() {
+        // 析构函数，释放资源
+    }
+
+    TfPoint() {
+    }
+
+    cv::Point2f position;
+    cv::Rect2i rect;
+    bool isOutside = false;
+
+    std::string toJson() const {
+        return "{"
+               "\"position\": {"
+               "\"x\": " + std::to_string(position.x) + ", "
+                                                        "\"y\": " + std::to_string(position.y) +
+               "}, "
+               "\"isOutside\": " + (isOutside ? "true" : "false") +
+               "}";
+    }
+
+
+};
+
 class LightPoint {
 public:
     cv::Point2f position;
+    int label = -1;
     double with = 7.0;
     double height = 7.0;
     int score = -1;
     double brightness = -1;
-    int label = -1;
     CUS_COLOR_TYPE type = E_W;
     LIGHT_STATUS errorStatus = NORMAL;
     float tfScore = 0;
@@ -79,6 +104,13 @@ public:
         height = heightset;
     }
 
+    LightPoint(cv::Point2f point, double withSet, double heightset, CUS_COLOR_TYPE type) {
+        position = point;
+        with = withSet;
+        height = heightset;
+        type = type;
+    }
+
     LightPoint(int labelSet) {
         label = labelSet;
     }
@@ -95,38 +127,6 @@ public:
         return point;
     }
 
-    cv::Rect2i safeRect(const cv::Rect2i &region, const cv::Size &imageSize) {
-        cv::Rect2i safe = region;
-        safe.x = safe.x;
-        safe.y = safe.y;
-        safe.width = safe.width;
-        safe.height = safe.height;
-        safe.x = std::max(0, std::min(safe.x, imageSize.width - 1));
-        safe.y = std::max(0, std::min(safe.y, imageSize.height - 1));
-        safe.width = std::min(safe.width, imageSize.width - safe.x);
-        safe.height = std::min(safe.height, imageSize.height - safe.y);
-        return safe;
-    }
-
-    cv::Mat buildRect(const cv::Mat &src, cv::Rect &roi) {
-        cv::Mat region;
-        try {
-            if (src.empty()) {
-                LOGE(LOG_TAG, "buildRect src is empty!");
-            }
-            float x = position.x; // 指定坐标x
-            float y = position.y; // 指定坐标y
-            roi = cv::Rect(x, y, with, height);
-            if (roi.width < 7.0) roi.width = 7.0;
-            if (roi.height < 7.0) roi.height = 7.0;
-            cv::Rect2i safeR = safeRect(roi, src.size());
-            region = src(safeR);
-        } catch (...) {
-            roi = cv::Rect();
-            LOGE(LOG_TAG, "构建点的矩形失败");
-        }
-        return region;
-    }
 
     // 重载==运算符以支持比较
     bool operator==(const LightPoint &other) const {
@@ -134,3 +134,4 @@ public:
                position.y == other.position.y;
     }
 };
+

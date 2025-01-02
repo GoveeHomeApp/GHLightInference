@@ -42,6 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)clearAllresLp;
 
+- (void)releaseOutProcess;
+
 @end
 
 NS_ASSUME_NONNULL_END
