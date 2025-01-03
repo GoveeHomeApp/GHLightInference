@@ -75,13 +75,16 @@ vector<LightPoint> resLp;
     SplitterConfig config;
     config.max_id_range = icCount - 1;
     g_colorSplitter = ColorSplitter(config);
-    g_colorSplitter.initColorMappingCache();
 }
 
 - (NSArray<NSArray<NSNumber *> *> *)getColorsByStep:(NSInteger)frameStep {
     NSMutableArray<NSNumber *> *redArray = [NSMutableArray array];
     NSMutableArray<NSNumber *> *greenArray = [NSMutableArray array];
     std::vector<std::vector<int>> colorMap;
+    // 每次第一步初始化ColorMap
+    if (frameStep == 0) {
+        g_colorSplitter.initColorMappingCache();
+    }
     colorMap = g_colorSplitter.getSplitColorMapping(frameStep);
 //    colorMap = getColors((int)frameStep);
     // 将std::vector转换为NSArray

@@ -158,7 +158,9 @@ String sortStripByStep(int frameStep, vector<LightPoint> &resultObjects,
             vector<int> eraseVector = polyPoints(pPointXys, 3, 2.3);
             sort(eraseVector.begin(), eraseVector.end(), std::greater<int>());
             for (int index: eraseVector) {
-                pPointXys.erase(pPointXys.begin() + index);
+                if (pPointXys.begin() + index < pPointXys.end() - 1) {
+                    pPointXys.erase(pPointXys.begin() + index);
+                }
             }
 
             //绘制丢弃离群点后点的点位
