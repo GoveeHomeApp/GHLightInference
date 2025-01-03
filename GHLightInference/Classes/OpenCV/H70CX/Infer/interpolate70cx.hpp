@@ -2,6 +2,7 @@
 #define __INTERPOLATE70CX_HPP__
 
 #include "common.hpp"
+#include "color_splitter.hpp"
 #include <vector>
 #include <numeric>
 #include <cmath>
@@ -34,8 +35,8 @@ enum class FitType {
 
 
 // 使用多项式拟合进行插值
-vector<LightPoint> interpolateAndExtrapolatePoints(
-        const vector<LightPoint> &input,
+vector<LedPoint> interpolateAndExtrapolatePoints(
+        const vector<LedPoint> &input,
         int maxLabel,
         int fitPoints = 20,
         FitType fitType = FitType::LINEAR
@@ -57,7 +58,7 @@ vector<Group> groupLightPoints(const vector<LightPoint> &lightPoints);
  * 根据相邻位置关系找出离群点
  */
 void detectOutlierPoints(vector<LightPoint> &points, vector<LightPoint> &errorPoints,
-                         float avgDistance, int diff = 4);
+                         float avgDistance);
 
 bool canBelievePrePre(const vector<LightPoint> &points, int i, double avgDistance);
 
@@ -74,5 +75,7 @@ removeOutliers(const std::vector<LightPoint> &points, float labelWeight = 0.5,
 void removeOutliersDBSCAN(std::vector<LightPoint> &points,
                           float eps = 0.2f, int minPts = 3,
                           float labelWeight = 1);
+double sigmoid(double x, double scale = 10.0);
 
+double smoothLimit(double value, double min, double max, double transitionRange = 0.1);
 #endif

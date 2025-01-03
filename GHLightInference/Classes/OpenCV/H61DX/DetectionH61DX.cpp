@@ -1,5 +1,4 @@
 #include "DetectionH61DX.hpp"
-#include "logger.hpp"
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include "ColorCodingH61DX.hpp"
@@ -7,6 +6,7 @@
 #include "GroupUtilH61DX.hpp"
 #include <unordered_set>
 #include <unordered_map>
+#include "LogUtils.h"
 
 using namespace cv;
 using namespace std;

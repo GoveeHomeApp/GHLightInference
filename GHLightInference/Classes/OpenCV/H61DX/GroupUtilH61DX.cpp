@@ -1,10 +1,10 @@
 #include "GroupUtilH61DX.hpp"
-#include "logger.hpp"
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include "UtilH61DX.hpp"
 #include <unordered_map>
 #include <unordered_set>
+#include "LogUtils.h"
 
 #if DEBUG
 #include <iostream>

@@ -1,6 +1,7 @@
 //
 // Created by linpeng on 2024/7/3.
 //
+#pragma once
 #ifndef LOGGER_HPP
 #define LOGGER_HPP
 
@@ -10,10 +11,17 @@
 #include <memory>
 
 #ifdef __ANDROID__
+
 #include <android/log.h>
+
 #elif defined(__APPLE__)
 #include <os/log.h>
 #endif
+
+#define LOG_TAG "OpenCv"
+#define TAG_INFERRED "OpenCv_Inferred"
+#define TAG_DELETE "OpenCv_Delete"
+#define TAG_ADD "OpenCv_Add"
 
 class Logger {
 public:
@@ -24,9 +32,13 @@ public:
         L_WARNING,
         L_ERROR
     };
-
+#if DEBUG
+    const static bool debugSwitch = true;
+#else
+    const static bool debugSwitch = false;
+#endif
     static void log(LogLevel level, const char *tag, const char *format, ...) {
-//        if (true)return;
+        if (!debugSwitch)return;
         va_list args;
         va_start(args, format);
 
@@ -39,24 +51,24 @@ public:
 
 #ifdef __ANDROID__
         android_LogPriority priority;
-            switch (level) {
-                case LogLevel::L_VERBOSE:
-                    priority = ANDROID_LOG_VERBOSE;
-                    break;
-                case LogLevel::L_DEBUG:
-                    priority = ANDROID_LOG_DEBUG;
-                    break;
-                case LogLevel::L_INFO:
-                    priority = ANDROID_LOG_INFO;
-                    break;
-                case LogLevel::L_WARNING:
-                    priority = ANDROID_LOG_WARN;
-                    break;
-                case LogLevel::L_ERROR:
-                    priority = ANDROID_LOG_ERROR;
-                    break;
-            }
-            __android_log_write(priority, tag, message.c_str());
+        switch (level) {
+            case LogLevel::L_VERBOSE:
+                priority = ANDROID_LOG_VERBOSE;
+                break;
+            case LogLevel::L_DEBUG:
+                priority = ANDROID_LOG_DEBUG;
+                break;
+            case LogLevel::L_INFO:
+                priority = ANDROID_LOG_INFO;
+                break;
+            case LogLevel::L_WARNING:
+                priority = ANDROID_LOG_WARN;
+                break;
+            case LogLevel::L_ERROR:
+                priority = ANDROID_LOG_ERROR;
+                break;
+        }
+        __android_log_write(priority, tag, message.c_str());
 #elif defined(__APPLE__)
         os_log_type_t type;
             switch (level) {
