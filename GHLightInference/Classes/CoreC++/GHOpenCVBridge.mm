@@ -5,9 +5,9 @@
 //  Created by sy on 2024/5/15.
 //
 
+// 这个位置对应的是jni一些代码实现
 #import "GHOpenCVBridge.h"
 #include "features.hpp"
-#include "sequence.hpp"
 
 #import <iostream>
 #import <stdlib.h>
@@ -65,20 +65,28 @@ vector<LightPoint> resLp;
 }
 
 - (int)getMaxStep {
-    return getMaxStepCnt();
+    return g_colorSplitter.getMaxSplitCount();
 }
 
 - (void)createAllStepByIc:(NSInteger)icCount {
     // 每次开始释放旧资源
     releaseAll();
-    initVector((int)icCount);
+    // 初始化Config
+    SplitterConfig config;
+    config.max_id_range = icCount - 1;
+    g_colorSplitter = ColorSplitter(config);
 }
 
 - (NSArray<NSArray<NSNumber *> *> *)getColorsByStep:(NSInteger)frameStep {
     NSMutableArray<NSNumber *> *redArray = [NSMutableArray array];
     NSMutableArray<NSNumber *> *greenArray = [NSMutableArray array];
     std::vector<std::vector<int>> colorMap;
-    colorMap = getColors((int)frameStep);
+    // 每次第一步初始化ColorMap
+    if (frameStep == 0) {
+        g_colorSplitter.initColorMappingCache();
+    }
+    colorMap = g_colorSplitter.getSplitColorMapping(frameStep);
+//    colorMap = getColors((int)frameStep);
     // 将std::vector转换为NSArray
     for (std::vector<int> subMap : colorMap) {
         int firstValue = subMap.front();
@@ -288,6 +296,7 @@ void releaseAll() {
     emptyMats.clear();
     resLp.clear();
     resLp.shrink_to_fit();
+    g_colorSplitter.clearCache();
 }
 
 - (void)releaseOutProcess {

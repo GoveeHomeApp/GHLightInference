@@ -44,6 +44,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)releaseOutProcess;
 
+/* 分割算法实现方法 */
+
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -6,153 +6,6 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <map>
-/**
- * 查找灯带光点
- */
-void
-findByContours(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lightPoints,
-               vector<Mat> &outMats) {
-    LOGD(LOG_TAG, "===============查找灯带光点===============");
-    // 1. HSV转换和饱和度增强
-    Mat hsv, enhanced;
-    vector<Mat> hsvChannels;
-    cvtColor(image, hsv, COLOR_BGR2HSV);
-    split(hsv, hsvChannels);
-
-    // 创建并应用饱和度LUT
-    const int lutSize = 256;
-    const double sFactor = 1.2;
-    Mat sLUT(1, lutSize, CV_8UC1);
-    for (int i = 0; i < lutSize; ++i) {
-        sLUT.at<uchar>(i) = saturate_cast<uchar>(i * sFactor);
-    }
-    LUT(hsvChannels[1], sLUT, hsvChannels[1]);
-
-    // 合并通道并转回BGR
-    merge(hsvChannels, hsv);
-    cvtColor(hsv, enhanced, COLOR_HSV2BGR);
-    cvtColor(enhanced, enhanced, COLOR_BGR2GRAY);
-    outMats.push_back(enhanced);
-
-    // 3. 阈值处理和轮廓检测
-    Mat binaryImage = thresholdPoints(enhanced, hsvChannels[0], outMats);
-
-    // 确保二值图像类型正确
-    if (binaryImage.type() != CV_8UC1) {
-        Mat temp;
-        binaryImage.convertTo(temp, CV_8UC1);
-        binaryImage = temp;
-    }
-    outMats.push_back(binaryImage);
-
-    // 4. 轮廓检测
-    vector<vector<Point>> contours;
-    findContours(binaryImage.clone(), contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    LOGD(LOG_TAG, "=====contours count =%d", contours.size());
-
-    // 5. 处理轮廓
-    for (const auto &contour: contours) {
-        double area = contourArea(contour);
-        if (area < 10.0) continue;
-
-        Point2f center;
-        float radius;
-        minEnclosingCircle(contour, center, radius);
-//        if (radius < 3)continue;
-        pointVector.emplace_back(center);
-
-        LightPoint lightPoint;
-        lightPoint.position = center;
-        lightPoints.push_back(lightPoint);
-//        LOGV("contourArea", "Light point area: %.2f, radius: %.2f", area, radius);
-    }
-    LOGD(LOG_TAG, "点数量=%d", pointVector.size());
-}
-
-Mat thresholdPoints(Mat &src, Mat &hue,
-                    vector<Mat> &outMats) {
-    Mat morphology_image, threshold_image;
-    int thresh = 200;
-    // 1. 自适应阈值查找
-    vector<vector<Point>> contours;
-    threshold(src, threshold_image, thresh, 255, THRESH_BINARY);
-    morphology_image = morphologyImage(threshold_image, 3, 5, MORPH_ELLIPSE);
-    findContours(morphology_image.clone(), contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    outMats.push_back(morphology_image);
-
-    // 2. 轮廓排序
-    sort(contours.begin(), contours.end(), compareContourAreas);
-
-    // 3. 轮廓处理
-    Mat dst = Mat::zeros(morphology_image.size(), CV_8UC1);
-    Mat kernelErode = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-    bool hasErode = false;
-
-    for (int i = 0; i < contours.size(); i++) {
-        double area = contourArea(contours[i]);
-
-        // 创建掩码
-        Mat mask = Mat::zeros(hue.size(), CV_8UC1);
-        Point2f center;
-        float radius = 9.0f;
-        minEnclosingCircle(contours[i], center, radius);
-        circle(mask, center, 9, Scalar(255), -1);
-        drawContours(mask, contours, i, Scalar(255), FILLED);
-
-        // 计算统计值
-        Scalar mean, stddev;
-        meanStdDev(hue, mean, stddev, mask);
-//        LOGV(LOG_TAG, "Area: %.2f, Mean: %.2f, StdDev: %.2f", area, mean[0], stddev[0]);
-
-        // 根据面积和标准差决定处理方式
-        if (area > 400 || stddev[0] < 4) {
-//            LOGV(LOG_TAG, "Skipped: Area=%.2f, StdDev=%.2f", area, stddev[0]);
-            continue;
-        }
-
-        if (area >= 200) {
-            drawContours(dst, contours, i, Scalar(255), -1);
-        } else {
-            if (!hasErode) {
-                erode(dst, dst, kernelErode);
-                outMats.push_back(dst);
-                hasErode = true;
-            }
-            if (area > 20)
-                drawContours(dst, contours, i, Scalar(255), -1);
-        }
-    }
-
-    outMats.push_back(dst);
-    return dst;
-}
-
-void findNoodleLamp(Mat &image, vector<Point2f> &pointVector, vector<LightPoint> &lightPoints,
-                    vector<Mat> &outMats) {
-    LOGD(LOG_TAG, "tf识别数量：%d", lightPoints.size());
-    Mat tfOut = image.clone();
-    for (auto lp: lightPoints) {
-        Rect2i tfRect = lp.tfRect;
-        double height = max(tfRect.width, tfRect.height);
-        if (height < 300) {
-            for (int k = 0; k < 4; k++) {
-                //originalFrame1C, roi, Scalar(255, 0, 50), 4);
-                rectangle(tfOut, tfRect, Scalar(255, 0, 50), 2);
-            }
-        }
-    }
-
-    putText(tfOut, "tensorFRect", Point(50, 50), FONT_HERSHEY_SIMPLEX,
-            0.7, Scalar(255, 0, 50), 2);
-    outMats.push_back(tfOut);
-
-
-    try {
-        Mat dst = thresholdNoodleLamp(image, lightPoints, outMats);
-    } catch (...) {
-        LOGE(LOG_TAG, "异常状态30");
-    }
-}
 
 vector<int>
 polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold) {
@@ -174,19 +27,19 @@ polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold) {
                3, KMEANS_PP_CENTERS, centers);
 
         // 计算每个数据点到其对应聚类中心的距离
-        vector<double> distances;
+        vector<float> distances;
         map<int, vector<float>> distancesMap;
         for (int i = 0; i < pointsMat.rows; i++) {
             Point2f point = pointsMat.at<Point2f>(i);
             int type = labels.at<int>(i);
             Point2f center = centers.at<Point2f>(type);
-            double distance = norm(point - center);
+            float distance = norm(point - center);
             distances.push_back(distance);
         }
         // 计算离群点的阈值
         Scalar mean, stddev;
         meanStdDev(distances, mean, stddev);
-        double threshold = mean[0] + stddevThreshold * stddev[0];
+        float threshold = mean[0] + stddevThreshold * stddev[0];
         int size = pointVector.size();
 
         // 输出离群点
@@ -201,10 +54,6 @@ polyPoints(vector<Point2f> &pointVector, int k, double stddevThreshold) {
         }
 
         LOGD(LOG_TAG, "pointVector擦除离群点 = %d", size - pointVector.size());
-        vector<vec4f> data;
-        for (auto &i: pointVector) {
-            data.push_back(vec4f{i.x * 1.f, i.y * 1.f});
-        }
     } catch (...) {
         LOGE(LOG_TAG, "========》 异常5");
     }
@@ -221,39 +70,82 @@ double angle(Vec4i line) {
     return atan2(line[3] - line[1], line[2] - line[0]);
 }
 
-Rect2i safeRect(const Rect2i &region, const Size &imageSize) {
-    Rect2i safe = region;
+Rect2i safeRect(const cv::Rect2i &region, const cv::Size &imageSize) {
+    cv::Rect2i safe = region;
     safe.x = safe.x - 4;
     safe.y = safe.y - 4;
     safe.width = safe.width + 4;
     safe.height = safe.height + 4;
-    safe.x = max(0, min(safe.x, imageSize.width - 1));
-    safe.y = max(0, min(safe.y, imageSize.height - 1));
-    safe.width = min(safe.width, imageSize.width - safe.x);
-    safe.height = min(safe.height, imageSize.height - safe.y);
+    safe.x = std::max(0, std::min(safe.x, imageSize.width - 1));
+    safe.y = std::max(0, std::min(safe.y, imageSize.height - 1));
+    safe.width = std::min(safe.width, imageSize.width - safe.x);
+    safe.height = std::min(safe.height, imageSize.height - safe.y);
     return safe;
 }
 
+/**
+ 计算 region 的对角线长度，作为延伸的最大长度。
+从灯带的中心点开始，向两个方向延伸，每个方向延伸 region 对角线长度的一半。
+使用 lambda 函数 clipToRegion 确保延伸后的端点不会超出 region 的边界。
+基于裁剪后的端点计算新的中心点和长度
+ */
+cv::RotatedRect extendRotatedRect(const cv::RotatedRect &rect, const cv::Rect &region) {
+    // 计算矩形的方向向量
+    float angle = rect.angle * CV_PI / 180.0;
+    cv::Point2f direction(std::cos(angle), std::sin(angle));
+
+    // 计算region的对角线长度
+    float regionLength = std::sqrt(region.width * region.width + region.height * region.height);
+
+    // 计算延伸后的端点
+    cv::Point2f center = rect.center;
+    cv::Point2f extended1 = center + direction * (regionLength / 2);
+    cv::Point2f extended2 = center - direction * (regionLength / 2);
+
+    // 将端点裁剪到区域内
+    auto clipToRegion = [&region](cv::Point2f &p) {
+        p.x = std::max(float(region.x), std::min(p.x, float(region.x + region.width - 1)));
+        p.y = std::max(float(region.y), std::min(p.y, float(region.y + region.height - 1)));
+    };
+
+    clipToRegion(extended1);
+    clipToRegion(extended2);
+
+    // 计算新的中心点和大小
+    cv::Point2f newCenter = (extended1 + extended2) * 0.5f;
+    float newLength = cv::norm(extended1 - extended2);
+
+//    float angleR = rect.angle;
+//    // 保持原始宽度不变
+//    if (rect.size.width > rect.size.height && newLength < rect.size.height) {
+//        angleR += 90.0f;
+//        if (angleR > 180.0f) {
+//            angleR -= 180.0f;
+//        }
+//    }
+
+    return cv::RotatedRect(newCenter, cv::Size2f(newLength, rect.size.height), rect.angle);
+}
 
 RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vector<Mat> &outMats) {
     Rect2i safeRegion = safeRect(region, input.size());
     if (safeRegion.width <= 0 || safeRegion.height <= 0) {
-        return {}; // 返回一个空的RotatedRect
+        return cv::RotatedRect(); // 返回一个空的RotatedRect
     }
-    Mat gray, hsv, binary2;
-    Mat roi = input(safeRegion);
+    cv::Mat gray, hsv, binary2;
+    cv::Mat roi = input(safeRegion);
     // 转换为灰度图
     cvtColor(roi, gray, COLOR_BGR2GRAY);
     Mat result = roi.clone();
 
-    cvtColor(roi, hsv, COLOR_BGR2HSV);
+    cv::cvtColor(roi, hsv, cv::COLOR_BGR2HSV);
     // 提取亮度通道
-    vector<Mat> hsvChannels;
-    split(hsv, hsvChannels);
-    Mat value = hsvChannels[2];
+    std::vector<cv::Mat> hsvChannels;
+    cv::split(hsv, hsvChannels);
+    cv::Mat value = hsvChannels[2];
 
     // 应用高斯模糊以减少噪声
-    GaussianBlur(value, value, Size(5, 5), 0);
+    cv::GaussianBlur(value, value, cv::Size(5, 5), 0);
 
     // 定义绿色和红色灯条的颜色范围（根据实际情况调整）
     Scalar lower_green(35, 50, 50);
@@ -275,7 +167,7 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
     mask = mask_green | mask_red;
 
     // 使用Otsu方法进行阈值处理
-    double otsuThresh = threshold(value, binary2, 0, 255, THRESH_BINARY | THRESH_OTSU);
+    double otsuThresh = cv::threshold(value, binary2, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
     Mat binary1;
     Mat dst = Mat::zeros(roi.size(), CV_8UC1);
     int maxIterations = 8;
@@ -286,29 +178,29 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
     for (int i = 0; i < maxIterations && otsuThresh < 235; ++i) {
         stopIterations = i;
         // 应用二值化
-        threshold(gray, binary1, otsuThresh, 255, THRESH_BINARY);
+        cv::threshold(gray, binary1, otsuThresh, 255, cv::THRESH_BINARY);
 
         // 查找轮廓
-        vector<vector<Point>> contours;
-        findContours(binary1, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(binary1, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
         // 对大面积区域应用更高的阈值
-        Mat roiIteration;
+        cv::Mat roiIteration;
         // 遍历大面积轮廓
         for (const auto &contour: contours) {
             double area = contourArea(contour);
             if (area > minContourArea) {
                 // 创建掩码
                 Mat maskIteration = Mat::zeros(roi.size(), CV_8UC1);
-                drawContours(maskIteration, vector<vector<Point>>{contour}, 0,
-                             Scalar(255), -1);
+                drawContours(maskIteration, vector<vector<cv::Point>>{contour}, 0,
+                             cv::Scalar(255), -1);
 
                 resultGray.copyTo(roiIteration, maskIteration);
             } else {
                 if (i < 3 && area < 30) {
                 } else {
-                    drawContours(dst, vector<vector<Point>>{contour}, 0,
-                                 Scalar(255), -1);
+                    cv::drawContours(dst, std::vector<std::vector<cv::Point>>{contour}, 0,
+                                     cv::Scalar(255), -1);
                 }
             }
         }
@@ -322,16 +214,16 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
 
     LOGD(LOG_TAG, "otsuThresh = %f  stopIterations = %d", otsuThresh, stopIterations);
     // 形态学操作
-    Mat morphed1;
-    Mat kernel1 = getStructuringElement(MORPH_RECT, Size(3, 3));
-    Mat kernel2 = getStructuringElement(MORPH_RECT, Size(1, 1));
-    morphologyEx(mask, morphed1, MORPH_CLOSE, kernel1);
-    morphologyEx(morphed1, morphed1, MORPH_OPEN, kernel2);
+    cv::Mat morphed1;
+    cv::Mat kernel1 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+    cv::Mat kernel2 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(1, 1));
+    cv::morphologyEx(mask, morphed1, cv::MORPH_CLOSE, kernel1);
+    cv::morphologyEx(morphed1, morphed1, cv::MORPH_OPEN, kernel2);
 //    outMats.push_back(morphed1);
 
     // 查找轮廓
-    vector<vector<Point>> contours1;
-    findContours(morphed1, contours1, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    std::vector<std::vector<cv::Point>> contours1;
+    cv::findContours(morphed1, contours1, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
 
     // 合并所有轮廓的点集
@@ -341,7 +233,7 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
     }
     if (allPoints.empty()) {
         LOGE(LOG_TAG, "allPoints empty !");
-        return {};
+        return RotatedRect();
     }
     // 计算最小包裹矩形
     RotatedRect boundingBox = minAreaRect(allPoints);
@@ -355,6 +247,41 @@ RotatedRect findLightStripInRegion(const Mat &input, const Rect2i &region, vecto
     return boundingBox;
 }
 
+std::vector<std::vector<cv::Point>>
+removeLargeContours(const std::vector<std::vector<cv::Point>> &contours, double threshold,
+                    size_t minContourCount) {
+    // 如果轮廓数量不大于minContourCount，直接返回原始轮廓
+    if (contours.size() <= minContourCount) {
+        return contours;
+    }
+
+    // 计算所有轮廓的面积
+    std::vector<double> areas;
+    for (const auto &contour: contours) {
+        areas.push_back(cv::contourArea(contour));
+    }
+
+    // 计算面积的中位数
+    size_t n = areas.size() / 2;
+    std::nth_element(areas.begin(), areas.begin() + n, areas.end());
+    double median_area = areas[n];
+
+    // 如果是偶数个元素，取中间两个数的平均
+    if (areas.size() % 2 == 0) {
+        std::nth_element(areas.begin(), areas.begin() + n - 1, areas.end());
+        median_area = (median_area + areas[n - 1]) / 2.0;
+    }
+
+    // 过滤掉面积大于阈值倍中位数的轮廓
+    std::vector<std::vector<cv::Point>> filtered_contours;
+    for (const auto &contour: contours) {
+        if (cv::contourArea(contour) <= threshold * median_area) {
+            filtered_contours.push_back(contour);
+        }
+    }
+
+    return filtered_contours;
+}
 
 vector<LightPoint> removeLargeRectangles(vector<LightPoint> &lightStrips) {
     // 步骤 1: 计算平均长度
@@ -421,27 +348,6 @@ findLightStrips(const Mat &input, vector<LightPoint> &lps, vector<Mat> &outMats)
     return lightStrips;
 }
 
-Mat thresholdNoodleLamp(Mat &image, vector<LightPoint> &lightPoints, vector<Mat> &outMats) {
-    vector<RotatedRect> rRectList = findLightStrips(image, lightPoints, outMats);
-    LOGD(LOG_TAG, "rRectList = %d", rRectList.size());
-    lightPoints.clear();
-    try {
-        LOGE(LOG_TAG, "rRectList = %d ", rRectList.size());
-        for (auto resultRect: rRectList) {
-            LightPoint lp = LightPoint();
-            lp.with = resultRect.size.width;
-            lp.height = resultRect.size.height;
-            lp.tfRect = resultRect.boundingRect();
-            lp.rotatedRect = resultRect;
-            lp.position = resultRect.center;
-            lightPoints.push_back(lp);
-        }
-    } catch (...) {
-        LOGE(LOG_TAG, "异常状态29");
-    }
-    LOGW(LOG_TAG, "矩形轮廓数量lightPoints= %d", lightPoints.size());
-    return image;
-}
 
 double calculateDistance(Point2f p1, Point2f p2) {
     return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
@@ -503,9 +409,8 @@ Mat morphologyImage(Mat &image, int openKernelSize,
     Mat openKernel = getStructuringElement(shape, Size(openKernelSize, openKernelSize));
 
     Mat morphologyImage;
-    morphologyEx(image, outMat, MORPH_OPEN, openKernel);// 开运算去除小噪点
-    morphologyEx(image, outMat, MORPH_CLOSE, openKernel);// 闭运算填充内部小孔
-    if (dilateKernelSize > 0) {//腐蚀操作，减小轮廓大小到实际尺寸
+    morphologyEx(image, outMat, MORPH_OPEN, openKernel);
+    if (dilateKernelSize > 0) {
         Mat dilateKernel = getStructuringElement(shape,
                                                  Size(dilateKernelSize, dilateKernelSize));
         morphologyEx(outMat, outMat, MORPH_DILATE, dilateKernel, Point2f(-1, -1),
@@ -537,21 +442,6 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
         Point2f pointRight(0, 0), pointLeft(0, 0);
         // 计算凸包的中心点
         Moments mu = moments(hull);
-        for (const auto &item: points){
-            if (item.x <= 10 || item.x >= image.cols - 10 || item.y <= 0|| item.y >= image.rows - 10) {
-                LOGE(LOG_TAG, "getMinTrapezoid 异常点 = %f x %f", item.x, item.y);
-            }
-            circle(image, item, 7, Scalar(0, 255, 255, 150), 2);
-        }
-        // 绘制凸包
-//        if (!hull.empty()) {
-//            polylines(image, vector<vector<Point2f>>{hull}, true, Scalar(255, 165, 0), 2);
-//        }
-
-        for (const auto &item: hull) {
-            LOGD(LOG_TAG, "item = %f - %f", item.x, item.y);
-        }
-
         for (int i = 0; i < hull.size(); i++) {
             Point2f point1 = hull[i];
             Point2f point2 = hull[(i + 1) % hull.size()];
@@ -615,12 +505,12 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
 
         double angleSelect = 0;
         if (abs(pointRight.x - mu.m10 / mu.m00) > abs(mu.m10 / mu.m00 - pointLeft.x)) {
-            pointRight.x = pointRight.x - 3;
+            pointRight.x = pointRight.x - 5;
             //取右边点
             int leftX = mu.m10 / mu.m00 - (pointRight.x - mu.m10 / mu.m00);
             pointLeft = Point2f(leftX, pointRight.y);
         } else {
-            pointLeft.x = pointLeft.x + 3;
+            pointLeft.x = pointLeft.x + 5;
             int rightX = mu.m10 / mu.m00 + (mu.m10 / mu.m00 - pointLeft.x);
             pointRight = Point2f(rightX, pointLeft.y);
         }
@@ -635,8 +525,8 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
         if (angleSelect <= 5) {
             LOGE(LOG_TAG, "左右均无有效斜边");
             return 0;
-        } else if (angleSelect > 80) {
-            angleSelect = 80;
+        } else if (angleSelect > 77) {
+            angleSelect = 77;
         }
 
         circle(image, pointRight,
@@ -672,9 +562,6 @@ getMinTrapezoid(Mat &image, const vector<Point2f> &pointsSrc, vector<Point2f> &t
              closestAngleRight,
              closestAngleLeft, angleSelect);
         return 1;
-    } catch (const std::exception &e) {
-        LOGE(LOG_TAG, "getMinTrapezoid e =  %s", e.what());
-        return 0;
     } catch (...) {
         LOGE(LOG_TAG, "异常状态12");
         return 0;

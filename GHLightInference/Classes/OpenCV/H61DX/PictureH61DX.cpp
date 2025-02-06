@@ -1,5 +1,4 @@
 #include "PictureH61DX.hpp"
-#include "logger.hpp"
 #include "GroupUtilH61DX.hpp"
 #include "UtilH61DX.hpp"
 
