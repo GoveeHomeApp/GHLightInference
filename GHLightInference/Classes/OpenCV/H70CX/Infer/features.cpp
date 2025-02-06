@@ -155,13 +155,7 @@ String sortStripByStep(int frameStep, vector<LightPoint> &resultObjects,
             drawPointsWithCircles(image, pPointXys, outMats, "Merged Points");
 
             // 移除离群点
-            vector<int> eraseVector = polyPoints(pPointXys, 3, 2.3);
-            sort(eraseVector.begin(), eraseVector.end(), std::greater<int>());
-            for (int index: eraseVector) {
-                if (pPointXys.begin() + index < pPointXys.end() - 1) {
-                    pPointXys.erase(pPointXys.begin() + index);
-                }
-            }
+            polyPoints(pPointXys, 3, 2.3);
 
             //绘制丢弃离群点后点的点位
             drawPointsWithCircles(frameStepMap[STEP_VALID_FRAME_START], pPointXys, outMats,
