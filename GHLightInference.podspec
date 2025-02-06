@@ -1,7 +1,7 @@
 Pod::Spec.new do |s|
 
   s.name         = 'GHLightInference'
-  s.version      = '0.0.2'
+  s.version      = '0.0.3'
   s.summary      = 'GHLightInference.'
 
   s.homepage     = 'git@github.com:GoveeHomeApp/GHLightInference.git'
